@@ -1,0 +1,171 @@
+-- BacaKomik schema
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
+
+DROP TABLE IF EXISTS users;
+CREATE TABLE users (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    role ENUM('user','admin') DEFAULT 'user',
+    status ENUM('active','disabled') DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DROP TABLE IF EXISTS comics;
+CREATE TABLE comics (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    slug VARCHAR(255) NOT NULL UNIQUE,
+    alt_title VARCHAR(255) DEFAULT NULL,
+    author VARCHAR(150) DEFAULT NULL,
+    artist VARCHAR(150) DEFAULT NULL,
+    type ENUM('Manga','Manhwa','Manhua','Other') DEFAULT 'Manga',
+    status ENUM('Ongoing','Completed','Hiatus') DEFAULT 'Ongoing',
+    synopsis TEXT,
+    cover_image VARCHAR(255) DEFAULT NULL,
+    source_url VARCHAR(500) DEFAULT NULL,
+    rating DECIMAL(3,1) DEFAULT 0,
+    views INT UNSIGNED DEFAULT 0,
+    is_featured TINYINT(1) DEFAULT 0,
+    is_popular TINYINT(1) DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_status (status),
+    INDEX idx_type (type),
+    INDEX idx_featured (is_featured),
+    INDEX idx_popular (is_popular)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DROP TABLE IF EXISTS genres;
+CREATE TABLE genres (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    slug VARCHAR(100) NOT NULL UNIQUE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DROP TABLE IF EXISTS comic_genres;
+CREATE TABLE comic_genres (
+    comic_id INT UNSIGNED NOT NULL,
+    genre_id INT UNSIGNED NOT NULL,
+    PRIMARY KEY (comic_id, genre_id),
+    FOREIGN KEY (comic_id) REFERENCES comics(id) ON DELETE CASCADE,
+    FOREIGN KEY (genre_id) REFERENCES genres(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DROP TABLE IF EXISTS chapters;
+CREATE TABLE chapters (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    comic_id INT UNSIGNED NOT NULL,
+    chapter_number VARCHAR(20) NOT NULL,
+    title VARCHAR(255) DEFAULT NULL,
+    slug VARCHAR(255) NOT NULL,
+    source_url VARCHAR(500) DEFAULT NULL,
+    views INT UNSIGNED DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_comic_slug (comic_id, slug),
+    INDEX idx_comic (comic_id),
+    FOREIGN KEY (comic_id) REFERENCES comics(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DROP TABLE IF EXISTS chapter_images;
+CREATE TABLE chapter_images (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    chapter_id INT UNSIGNED NOT NULL,
+    image_path VARCHAR(500) NOT NULL,
+    image_url VARCHAR(500) DEFAULT NULL,
+    sort_order INT UNSIGNED DEFAULT 0,
+    INDEX idx_chapter (chapter_id),
+    FOREIGN KEY (chapter_id) REFERENCES chapters(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DROP TABLE IF EXISTS bookmarks;
+CREATE TABLE bookmarks (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL,
+    comic_id INT UNSIGNED NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_user_comic (user_id, comic_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (comic_id) REFERENCES comics(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DROP TABLE IF EXISTS reading_history;
+CREATE TABLE reading_history (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL,
+    comic_id INT UNSIGNED NOT NULL,
+    chapter_id INT UNSIGNED NOT NULL,
+    last_read_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_uc (user_id, comic_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (comic_id) REFERENCES comics(id) ON DELETE CASCADE,
+    FOREIGN KEY (chapter_id) REFERENCES chapters(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DROP TABLE IF EXISTS reports;
+CREATE TABLE reports (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED DEFAULT NULL,
+    comic_id INT UNSIGNED DEFAULT NULL,
+    chapter_id INT UNSIGNED DEFAULT NULL,
+    message TEXT,
+    status ENUM('pending','solved','rejected') DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DROP TABLE IF EXISTS pages;
+CREATE TABLE pages (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(150) NOT NULL,
+    slug VARCHAR(150) NOT NULL UNIQUE,
+    content MEDIUMTEXT,
+    status ENUM('draft','published') DEFAULT 'published',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DROP TABLE IF EXISTS settings;
+CREATE TABLE settings (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    setting_key VARCHAR(100) NOT NULL UNIQUE,
+    setting_value LONGTEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DROP TABLE IF EXISTS ad_slots;
+CREATE TABLE ad_slots (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    slot_key VARCHAR(50) NOT NULL UNIQUE,
+    slot_name VARCHAR(100) NOT NULL,
+    ad_code TEXT,
+    is_active TINYINT(1) DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DROP TABLE IF EXISTS import_logs;
+CREATE TABLE import_logs (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    source VARCHAR(100) NOT NULL,
+    source_url VARCHAR(500) DEFAULT NULL,
+    status ENUM('info','success','warning','error') DEFAULT 'info',
+    message TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DROP TABLE IF EXISTS import_jobs;
+CREATE TABLE import_jobs (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    type ENUM('comic','chapter','bulk','site') NOT NULL,
+    target_url TEXT NOT NULL,
+    status ENUM('pending','running','done','failed','cancelled') DEFAULT 'pending',
+    progress INT UNSIGNED DEFAULT 0,
+    total INT UNSIGNED DEFAULT 0,
+    message TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+SET FOREIGN_KEY_CHECKS = 1;

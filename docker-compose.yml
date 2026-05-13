@@ -1,0 +1,40 @@
+services:
+  app:
+    build: .
+    image: bacakomik:latest
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: bacakomik
+      DB_USER: bacakomik
+      DB_PASS: bacakomik
+      AUTO_INSTALL: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Persist scraped images & cache di luar container.
+      - storage_data:/var/www/html/storage
+
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: rootsecret
+      MARIADB_DATABASE: bacakomik
+      MARIADB_USER: bacakomik
+      MARIADB_PASSWORD: bacakomik
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  db_data:
+  storage_data:

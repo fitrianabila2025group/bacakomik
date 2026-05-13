@@ -1,0 +1,28 @@
+# Ignore artefak runtime — biarkan storage/ dasar tapi jangan commit konten.
+**/.DS_Store
+node_modules/
+vendor/
+
+# Konten scraping (besar — jangan dipush)
+storage/comics/*
+!storage/comics/.gitkeep
+storage/covers/*
+!storage/covers/.gitkeep
+storage/cache/*
+!storage/cache/.gitkeep
+storage/settings/*
+!storage/settings/.gitkeep
+
+# Lokal env / log
+.env
+.env.local
+*.log
+storage/cache/*.log
+
+# Editor & sistem
+.vscode/
+.idea/
+.history/
+*.swp
+*.swo
+Thumbs.db
