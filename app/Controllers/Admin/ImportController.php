@@ -85,7 +85,11 @@ class ImportController extends AdminController
      */
     public function tick(int $id): string
     {
-        Csrf::check();
+        // Note: sengaja TIDAK require CSRF supaya bisa dipicu via:
+        //  - frontend AJAX auto-resume
+        //  - URL manual (debug) di browser admin: GET /admin/import/tick/{id}
+        //  - cron URL eksternal (cPanel cron / UptimeRobot)
+        // Auth admin masih dipaksa lewat AdminController constructor.
         $job = Database::fetch('SELECT * FROM import_jobs WHERE id = ?', [$id]);
         if (!$job) return $this->json(['ok' => false, 'error' => 'Job tidak ada'], 404);
         if (in_array($job['status'], ['done','failed','cancelled'], true)) {

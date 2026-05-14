@@ -96,6 +96,7 @@ $router->post('/admin/import/preview',          'Admin\ImportController@preview'
 $router->post('/admin/import/run',              'Admin\ImportController@run');
 $router->get('/admin/import/status/{id}',       'Admin\ImportController@status');
 $router->post('/admin/import/tick/{id}',        'Admin\ImportController@tick');
+$router->get('/admin/import/tick/{id}',         'Admin\ImportController@tick');
 $router->post('/admin/import/cancel/{id}',      'Admin\ImportController@cancel');
 $router->post('/admin/import/retry-failed/{id}', 'Admin\ImportController@retryFailed');
 

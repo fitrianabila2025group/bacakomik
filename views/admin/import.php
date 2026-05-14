@@ -71,6 +71,7 @@
         <td><?= htmlspecialchars($j['updated_at']) ?></td>
         <td>
           <?php if (in_array($j['status'], ['pending','running'], true)): ?>
+            <button class="btn-ghost" data-tick="<?= $j['id'] ?>" title="Picu 1 step manual">▶ Run</button>
             <button class="btn-danger" data-cancel="<?= $j['id'] ?>">Cancel</button>
           <?php endif; ?>
           <?php if ($j['status'] === 'failed'): ?>

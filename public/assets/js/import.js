@@ -14,6 +14,12 @@
     if (el) el.innerHTML = html;
   }
 
+  // Tanpa CSRF — endpoint tick sengaja terbuka untuk admin (lihat ImportController::tick).
+  function tick(id) {
+    return fetch('/admin/import/tick/' + id, { method: 'POST' })
+      .then(r => r.json()).catch(() => null);
+  }
+
   // Preview
   document.getElementById('btn-preview')?.addEventListener('click', async () => {
     const url = document.querySelector('#form-preview input[name="url"]').value;
@@ -82,9 +88,7 @@
       // Jaga agar tidak menumpuk request tick (importFullComic bisa lama).
       if (!inFlightTick) {
         inFlightTick = true;
-        post('/admin/import/tick/' + id, {})
-          .catch(() => {})
-          .finally(() => { inFlightTick = false; });
+        tick(id).finally(() => { inFlightTick = false; });
       }
 
       const res = await fetch('/admin/import/status/' + id).then(r => r.json()).catch(() => null);
@@ -109,12 +113,20 @@
     }, 2000);
   }
 
-  // Cancel / retry
+  // Cancel / retry / manual tick
   document.addEventListener('click', async (e) => {
     const cancelId = e.target.dataset?.cancel;
     if (cancelId) { await post('/admin/import/cancel/' + cancelId, {}); pollJob(cancelId); }
     const retryId = e.target.dataset?.retry;
     if (retryId)  { await post('/admin/import/retry-failed/' + retryId, {}); pollJob(retryId); }
+    const tickId = e.target.dataset?.tick;
+    if (tickId)   {
+      e.target.disabled = true; e.target.textContent = '...';
+      const r = await tick(tickId);
+      e.target.disabled = false; e.target.textContent = '▶ Run';
+      if (!r || r.ok === false) alert('Tick gagal: ' + (r?.error || 'unknown'));
+      pollJob(tickId);
+    }
   });
 
   // Auto-resume: lanjutkan polling+tick untuk job yang masih pending/running
