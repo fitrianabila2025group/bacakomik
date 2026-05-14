@@ -1,3 +1,20 @@
-# BacaKomik .htaccess - route everything to public/index.php
+# BacaKomik .htaccess (root) — serve real root files, otherwise route to public/
 RewriteEngine On
+
+# 1) Jangan rewrite kalau file/dir benar-benar ada di root
+#    (install.php, robots.txt, dll. tetap bisa diakses langsung)
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# 2) Selain itu → forward ke public/
 RewriteRule ^(.*)$ public/$1 [L]
+
+# Block file sensitif yang kebetulan ada di root dari akses web
+<FilesMatch "\.(env|sql|md|lock|sh|ya?ml|ini|log)$">
+    Require all denied
+</FilesMatch>
+<FilesMatch "^(composer\.json|Dockerfile|docker-compose\.ya?ml)$">
+    Require all denied
+</FilesMatch>
+Options -Indexes
