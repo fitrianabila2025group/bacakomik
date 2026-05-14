@@ -175,10 +175,77 @@ Sitemap di-generate **realtime dari database** (tidak perlu regenerate manual).
 | Image komik tidak muncul | Pastikan `allow_url_fopen=On` di **MultiPHP INI Editor**. |
 | Installer tampil halaman putih | PHP version < 8.1 — naikkan via **Select PHP Version**. |
 | "BacaKomik sudah terinstall" tapi mau install ulang | Buka `install.php?force=1`, atau hapus file `storage/.installed` via File Manager. |
+| Scraper PHP terus gagal / Cloudflare block / timeout | Aktifkan **Remote Scraper Service** — lihat **Bagian 11** di bawah. |
 
 ---
 
-## 10. Update Aplikasi
+## 11. Remote Scraper Service (Cloudflare Bypass)
+
+Jika scraper bawaan PHP gagal terus di shared hosting (Cloudflare 403,
+exec/curl di-disable, request panjang di-kill LiteSpeed, dll), pasang
+**Scraper Service Python** terpisah lalu tinggal hubungkan via API.
+
+Semua source ada di folder [`scraper-service/`](scraper-service/) repo ini,
+lengkap dengan `Dockerfile`, `railway.json`, dan `docker-compose.yml`.
+
+### 11.1 Deploy ke Railway (paling cepat, gratis untuk start)
+
+1. Push folder `scraper-service/` ke GitHub (boleh repo terpisah, atau pakai repo BacaKomik dan set **Root Directory = scraper-service**).
+2. Login ke <https://railway.app> → **New Project → Deploy from GitHub repo** → pilih repo tadi.
+3. Tab **Variables**, tambahkan:
+   - `SCRAPER_API_KEY` = string acak panjang, mis. hasil `openssl rand -hex 32`
+   - `SCRAPER_MODE` = `request` (default; ganti `browser` kalau target pakai CF JS-challenge)
+   - `SCRAPER_WHITELIST` = `komiku.org,komiku.id,img.komiku.org,mangaku.top,img.mangaku.top,cover.mangaku.top`
+   - `CORS_ORIGINS` = `https://domain-shared-hosting-anda.com`
+4. Deploy → Railway memberi domain `https://xxxx.up.railway.app`.
+5. Tes: buka `https://xxxx.up.railway.app/health` → harus tampil `{"ok": true, ...}`.
+
+### 11.2 Deploy ke VPS (Docker)
+
+```bash
+git clone https://github.com/USERNAME/bacakomik.git
+cd bacakomik/scraper-service
+cp .env.example .env
+nano .env                     # isi SCRAPER_API_KEY (wajib)
+docker compose up -d --build
+curl http://SERVER_IP:8080/health
+```
+
+Pasang reverse-proxy + TLS (Caddy paling singkat):
+
+```caddyfile
+scraper.example.com {
+    reverse_proxy 127.0.0.1:8080
+}
+```
+
+### 11.3 Hubungkan dari shared hosting
+
+1. Login admin BacaKomik → **Settings**.
+2. Scroll ke section **Scraper API (Remote – Railway / VPS)**.
+3. Isi:
+   - ✅ **Pakai Remote Scraper API**
+   - **API URL** = `https://xxxx.up.railway.app` (tanpa `/` di akhir)
+   - **API Key** = sama dengan `SCRAPER_API_KEY` di service
+   - **API Timeout** = `120` (default oke)
+4. Klik **Test Connection** — harus muncul `OK — mode: request` (hijau).
+5. **Simpan**.
+
+Buka **Admin → Import** → badge atas berubah jadi **REMOTE API**. Semua tombol (preview, import 1 komik, bulk, auto-crawl seluruh situs) dan CLI `php bin/crawl.php` otomatis memakai service tersebut. Tidak ada perubahan skema DB.
+
+### 11.4 Mode bypass Cloudflare
+
+| `SCRAPER_MODE` | Backend | Kapan dipakai |
+|---|---|---|
+| `request` (default) | `botasaurus_requests` (TLS-fingerprint Chrome) | CF level standar — ringan, cepat, **tidak butuh Chrome**. |
+| `browser` | `botasaurus.browser` (Chromium headless) | Jika muncul "Just a moment..." atau Turnstile. Lebih berat (RAM ≥ 1 GB). |
+
+Detail troubleshooting & list endpoint lengkap ada di
+[`scraper-service/README.md`](scraper-service/README.md).
+
+---
+
+## 12. Update Aplikasi
 
 1. Backup folder `storage/` dan file `config/database.php`, `config/app.php`.
 2. Hapus semua file di `public_html` **kecuali** `storage/` dan `config/`.
