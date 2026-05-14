@@ -1,7 +1,21 @@
-# Panduan Instalasi BacaKomik di Shared Hosting (cPanel)
+# Panduan Instalasi BacaKomik di cPanel (Tanpa SSH)
 
-Panduan lengkap untuk menginstal BacaKomik di shared hosting standar (cPanel /
-DirectAdmin / Plesk). Tested dengan PHP 8.1 – 8.3 dan MariaDB 10.4+.
+Panduan ini khusus untuk hosting yang **tidak menyediakan akses SSH / Terminal** —
+semuanya cukup lewat **File Manager** dan browser. Tested di cPanel, DirectAdmin,
+dan Plesk dengan PHP 8.1 – 8.3 + MariaDB 10.4+.
+
+---
+
+## Ringkasan Singkat
+
+1. Upload `bacakomik.zip` ke `public_html` lalu **Extract**.
+2. Buat database & user di **MySQL® Databases**.
+3. Buka `https://domainanda.com/install.php` di browser.
+4. Isi form → klik **Install**.
+5. **Hapus** `install.php` lewat File Manager.
+6. Login admin → ganti password.
+
+Selesai. Tidak perlu sentuh terminal sama sekali.
 
 ---
 
@@ -9,135 +23,135 @@ DirectAdmin / Plesk). Tested dengan PHP 8.1 – 8.3 dan MariaDB 10.4+.
 
 | Komponen | Minimum | Catatan |
 |---|---|---|
-| PHP | 8.1 | Aktifkan ekstensi `pdo_mysql`, `mbstring`, `curl`, `dom`, `fileinfo`, `gd` (opsional). |
-| MySQL / MariaDB | 5.7 / 10.3 | Buat database baru (langkah 3). |
-| Apache | 2.4 + `mod_rewrite` | Sudah default di mayoritas cPanel. |
-| Disk | 2 GB minimum | Setiap chapter ~1-3 MB; full sitemap ~50-100 GB. |
+| PHP | 8.1 | Aktifkan ekstensi `pdo_mysql`, `mbstring`, `curl`, `dom`, `fileinfo`, `json`. |
+| MySQL / MariaDB | 5.7 / 10.3 | Buat database baru di langkah 3. |
+| Apache | 2.4 + `mod_rewrite` | Default di cPanel. |
+| Disk | 2 GB minimum | Tiap chapter ~1-3 MB. |
+
+> **Tips:** di cPanel, ekstensi PHP diatur di **Select PHP Version → Extensions**.
+> Centang minimal: `pdo_mysql`, `mbstring`, `curl`, `dom`, `fileinfo`, `json`.
 
 ---
 
-## 2. Upload Source
+## 2. Upload Source via File Manager
 
-**Cara A — via File Manager cPanel:**
+1. Login ke **cPanel** → buka **File Manager**.
+2. Masuk ke folder **`public_html`** (atau folder root domain Anda).
+3. Klik **Upload** → upload `bacakomik.zip` (download dari halaman Releases di GitHub).
+4. Setelah selesai, klik kanan file zip → **Extract** ke `public_html`.
+5. Hapus file `bacakomik.zip` setelah ekstrak selesai.
 
-1. Login ke cPanel.
-2. Buka **File Manager** → masuk ke folder `public_html` (atau folder root domain Anda).
-3. Upload file `bacakomik.zip` (download dari Releases di GitHub) lalu klik kanan → **Extract**.
-4. Pastikan struktur akhirnya:
-   ```
-   public_html/
-   ├── .htaccess          ← redirect ke /public
-   ├── app/
-   ├── config/
-   ├── public/
-   │   ├── .htaccess      ← rewrite rules
-   │   └── index.php
-   ├── storage/
-   └── ...
-   ```
+Struktur akhir di `public_html/`:
 
-**Cara B — via Git (jika hosting punya `git clone`):**
-```bash
-cd ~
-git clone https://github.com/<USER>/bacakomik.git
-mv bacakomik public_html_app   # opsional rename
 ```
-Lalu buat symlink `public_html` → `public_html_app/public` jika diizinkan.
+public_html/
+├── .htaccess          ← redirect ke /public
+├── app/
+├── config/
+├── database/
+├── install.php        ← installer (HAPUS setelah selesai!)
+├── public/
+│   ├── .htaccess      ← rewrite rules
+│   └── index.php
+├── storage/
+└── vendor/            ← sudah include di rilis zip
+```
 
-> 💡 **Rekomendasi terbaik:** jika hosting mengizinkan ubah _Document Root_,
-> ubah ke `public_html/public`. Lebih aman karena `app/`, `storage/`, dan
-> `config/` tidak bisa diakses lewat web.
+> **Rekomendasi keamanan (opsional):** ubah _Document Root_ domain ke
+> `public_html/public` lewat **Domains → Manage**. Folder `app/`, `storage/`,
+> `config/` jadi tidak bisa diakses langsung dari web.
 
 ---
 
 ## 3. Buat Database
 
 1. cPanel → **MySQL® Databases**.
-2. _Create New Database_ → nama: `username_bacakomik`.
-3. _Add New User_ → username: `username_bacauser`, password: kuat (simpan!).
-4. _Add User to Database_ → centang **All Privileges**.
+2. **Create New Database** → nama: `cpaneluser_bacakomik` (catat nama lengkapnya).
+3. **Add New User** → username: `cpaneluser_bacauser`, password kuat (catat!).
+4. **Add User to Database** → centang **All Privileges**.
+
+> Catatan: shared hosting biasanya memberi prefix otomatis (mis. `cpaneluser_`).
+> Gunakan nama lengkap dengan prefix saat mengisi installer.
 
 ---
 
-## 4. Konfigurasi Aplikasi
+## 4. Jalankan Web Installer
 
-Edit `config/database.php`:
+Buka di browser:
 
-```php
-return [
-    'host'     => '127.0.0.1',          // atau 'localhost'
-    'port'     => '3306',
-    'database' => 'username_bacakomik',
-    'username' => 'username_bacauser',
-    'password' => 'PASSWORD_DARI_LANGKAH_3',
-    'charset'  => 'utf8mb4',
-];
+```
+https://domainanda.com/install.php
 ```
 
-Edit `config/app.php`:
+Anda akan melihat halaman installer dengan:
 
-```php
-return [
-    'url'   => 'https://domainanda.com',  // tanpa trailing slash
-    'name'  => 'BacaKomik',
-    'debug' => false,                     // WAJIB false di produksi
-];
-```
+- **Pemeriksaan server** (PHP version, ekstensi, permission file).
+- **Form konfigurasi database** (host, name, user, password).
+- **Form konfigurasi aplikasi** (URL situs, nama, email & password admin).
+
+Isi semua field, lalu klik **▶ Install Sekarang**. Installer otomatis akan:
+
+- Menulis ulang `config/database.php` dan `config/app.php`.
+- Membuat database (jika belum ada) + import schema & seed.
+- Membuat / reset akun admin.
+- Membuat folder `storage/` dan sub-foldernya.
+
+Jika sukses, halaman akan menampilkan **✓ Installasi selesai**.
+
+### Jika ada error pemeriksaan server
+
+| Error | Solusi via cPanel |
+|---|---|
+| `pdo_mysql` non-aktif | **Select PHP Version → Extensions** → centang `pdo_mysql`. |
+| `config/*.php` tidak writable | File Manager → klik kanan folder `config` → **Permissions** → set `755`. File `.php` di dalamnya: `644`. |
+| `storage/` tidak writable | File Manager → klik kanan folder `storage` → **Permissions** → set `755` atau `775`, centang **Recurse into subdirectories**. |
+
+### Jika error "CREATE DATABASE not allowed"
+
+Beberapa shared hosting tidak izinkan PHP membuat database. Solusinya:
+buat database manualnya dulu di **MySQL® Databases** (langkah 3), lalu
+isi nama database persis sama di form installer.
 
 ---
 
-## 5. Jalankan Installer
+## 5. HAPUS install.php (WAJIB!)
 
-**Via Terminal (cPanel → Terminal / SSH):**
-```bash
-cd ~/public_html      # sesuaikan path
-php install.php
-```
-Output sukses:
-```
-✓ Installasi selesai.
-  Admin login: admin@example.com / admin12345
-```
+Setelah installer sukses:
 
-**Tanpa Terminal (web installer):** buka `https://domainanda.com/install.php`
-satu kali, lalu **HAPUS file `install.php`** demi keamanan.
+1. Buka **File Manager** → masuk ke `public_html`.
+2. Klik kanan `install.php` → **Delete**.
+
+> Installer juga membuat file `storage/.installed` yang akan memblokir
+> akses ulang ke `install.php` — tapi tetap **hapus filenya** demi keamanan.
 
 ---
 
-## 6. Set Permission Storage
-
-```bash
-chmod -R 775 storage/
-chown -R $(whoami):nobody storage/   # sesuaikan group ke user web (sering 'nobody' / 'apache')
-```
-Folder `storage/comics`, `storage/covers`, `storage/cache`, `storage/settings`
-harus writable oleh PHP.
-
----
-
-## 7. Login & Setup Awal
+## 6. Login & Setup Awal
 
 1. Buka `https://domainanda.com/login`.
-2. Login sebagai `admin@example.com` / `admin12345`.
-3. **GANTI PASSWORD** segera di **Admin → Users**.
-4. Buka **Admin → Settings** → atur Site Name, Logo, Meta SEO.
-5. Buka **Admin → Import → Auto-Crawl Seluruh Situs** untuk impor konten.
+2. Login dengan email & password admin yang Anda set di installer.
+3. Buka **Admin → Settings** → atur Site Name, Logo, Meta SEO.
+4. Buka **Admin → Import → Auto-Crawl Seluruh Situs** untuk impor konten.
 
 ---
 
-## 8. Cron Job (Opsional — untuk update otomatis)
+## 7. Cron Job (Opsional — Update Otomatis)
 
 Di cPanel → **Cron Jobs**, tambahkan job harian:
 
 ```
-0 3 * * * /usr/local/bin/php /home/USER/public_html/bin/crawl.php >/dev/null 2>&1
+0 3 * * * /usr/local/bin/php /home/USERNAME/public_html/bin/crawl.php >/dev/null 2>&1
 ```
-Akan crawl ulang sitemap setiap jam 03:00 — chapter baru otomatis ter-import
-(chapter lama di-skip karena sudah ada di DB).
+
+> Sesuaikan path PHP — cek dulu via **MultiPHP Manager** atau tanya hosting.
+> Cron akan crawl ulang sitemap setiap jam 03:00 dan auto-import chapter baru.
+
+Jika hosting Anda **tidak punya cron**, jalankan crawl manual via menu
+**Admin → Import** sesekali.
 
 ---
 
-## 9. SEO & Search Console
+## 8. SEO & Search Console
 
 Daftarkan situs di [Google Search Console](https://search.google.com/search-console)
 dan submit sitemap:
@@ -146,36 +160,43 @@ dan submit sitemap:
 https://domainanda.com/sitemap.xml
 ```
 
-`/sitemap.xml` adalah **sitemap index** yang otomatis link ke:
-- `/sitemap-pages.xml`     → halaman statis
-- `/sitemap-genres.xml`    → halaman genre
-- `/sitemap-comics-N.xml`  → komik (5000 / file)
-- `/sitemap-chapters-N.xml`→ chapter (10000 / file)
-
-Semua sitemap **realtime dari database** (lastmod akurat).
+Sitemap di-generate **realtime dari database** (tidak perlu regenerate manual).
 
 ---
 
-## 10. Troubleshooting
+## 9. Troubleshooting
 
 | Gejala | Solusi |
 |---|---|
-| HTTP 500 di semua page | Cek `error_log` di cPanel; biasanya `pdo_mysql` belum aktif → aktifkan via **Select PHP Version → Extensions**. |
-| 404 untuk semua URL kecuali `/` | `mod_rewrite` non-aktif atau `AllowOverride None`. Cek `.htaccess` ada di root & di `public/`. |
-| _"could not find driver"_ | Aktifkan `pdo_mysql` di **MultiPHP INI Editor** atau **Select PHP Version**. |
-| Storage tidak bisa ditulis | `chmod 775 storage/ -R` dan pastikan owner sesuai user web. |
-| Crawler lambat / timeout | Tambahkan `set_time_limit(0)` (sudah default). Jalankan via cron, bukan dari browser. |
-| Image tidak muncul | Cek `php.ini` → `allow_url_fopen=On` dan firewall keluar mengizinkan ke `*.komiku.org`. |
+| HTTP 500 di semua page | Cek **Errors** di cPanel atau `error_log` di `public_html`. Biasanya `pdo_mysql` belum aktif. |
+| 404 untuk semua URL kecuali `/` | `mod_rewrite` non-aktif. Pastikan `.htaccess` ada di root **dan** di `public/`. |
+| _"could not find driver"_ | Aktifkan `pdo_mysql` di **Select PHP Version → Extensions**. |
+| Storage tidak bisa ditulis | Set permission folder `storage/` ke `775` (Recurse). |
+| Image komik tidak muncul | Pastikan `allow_url_fopen=On` di **MultiPHP INI Editor**. |
+| Installer tampil halaman putih | PHP version < 8.1 — naikkan via **Select PHP Version**. |
+| "BacaKomik sudah terinstall" tapi mau install ulang | Buka `install.php?force=1`, atau hapus file `storage/.installed` via File Manager. |
 
 ---
 
-## 11. Update Aplikasi
+## 10. Update Aplikasi
+
+1. Backup folder `storage/` dan file `config/database.php`, `config/app.php`.
+2. Hapus semua file di `public_html` **kecuali** `storage/` dan `config/`.
+3. Upload + extract zip versi baru.
+4. (Opsional) Buka `install.php?force=1` lalu klik Install lagi — aman, idempotent. Lalu hapus lagi.
+
+---
+
+## Lampiran: Install via SSH (alternatif untuk power user)
+
+Jika hosting Anda **kebetulan** punya SSH, alur lebih cepat:
 
 ```bash
 cd ~/public_html
-git pull origin main           # jika via git
-# atau upload ulang file (kecuali config/, storage/, .env)
-php install.php                 # idempotent, aman dijalankan ulang
+php install.php       # versi CLI tidak lagi tersedia — gunakan web installer.
 ```
+
+Sejak versi terbaru, `install.php` **hanya berbentuk web installer**.
+Buka di browser meski via SSH-pun tetap pakai cara web di atas.
 
 Selesai 🎉
