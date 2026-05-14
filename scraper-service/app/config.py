@@ -106,7 +106,7 @@ class Settings:
 def get_settings() -> Settings:
     s = Settings()
     s.api_key = _resolve_api_key()
-    if s.mode not in ("request", "browser"):
+    if s.mode not in ("request", "botasaurus", "browser"):
         log.warning("SCRAPER_MODE='%s' tidak valid, fallback ke 'request'", s.mode)
         s.mode = "request"
     return s

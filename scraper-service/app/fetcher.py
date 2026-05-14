@@ -1,9 +1,12 @@
 """
 Cloudflare-bypassing fetcher.
 
-Two backends:
-  * "request" -> botasaurus_requests.Session (lightweight, no headless browser).
-  * "browser" -> Chrome via botasaurus.browser (heavier, CF JS-challenge).
+Backends:
+  * "request"   -> curl_cffi.requests.Session(impersonate="chrome131")
+                   (DEFAULT) — TLS-fingerprint Chrome, jauh lebih stabil
+                   dari botasaurus_requests.
+  * "botasaurus"-> botasaurus_requests.Session (kalau curl_cffi ditolak).
+  * "browser"   -> Chrome via botasaurus.browser (heavyweight, CF JS-challenge).
 
 A small filesystem cache keyed by URL avoids hammering origin during testing.
 """
@@ -26,7 +29,8 @@ _IMG_CACHE_DIR = os.path.join(_CACHE_DIR, "img")
 os.makedirs(_CACHE_DIR, exist_ok=True)
 os.makedirs(_IMG_CACHE_DIR, exist_ok=True)
 
-_session = None  # botasaurus_requests session (lazy)
+_session = None  # active session (lazy) — type tergantung mode
+_session_kind: Optional[str] = None
 _session_lock = threading.Lock()
 
 
@@ -71,13 +75,34 @@ def host_allowed(url: str) -> bool:
 
 
 def _get_request_session():
-    """Lazy-create a botasaurus_requests Session with CF bypass enabled."""
-    global _session
+    """
+    Lazy-create a session.
+    Mode:
+      - 'request' (default) -> curl_cffi.requests.Session(impersonate=chrome131)
+      - 'botasaurus'        -> botasaurus_requests.Session
+    """
+    global _session, _session_kind
+    s = get_settings()
+    desired = "botasaurus" if s.mode == "botasaurus" else "curl_cffi"
     with _session_lock:
-        if _session is None:
-            from botasaurus_requests import Session  # type: ignore
+        if _session is not None and _session_kind == desired:
+            return _session
+        if desired == "curl_cffi":
+            try:
+                from curl_cffi import requests as cc_requests  # type: ignore
 
-            _session = Session(browser="chrome", os="lin")
+                _session = cc_requests.Session(impersonate="chrome131")
+                _session_kind = "curl_cffi"
+                log.info("HTTP session: curl_cffi (impersonate=chrome131)")
+                return _session
+            except Exception as e:  # noqa: BLE001
+                log.warning("curl_cffi tidak tersedia (%s) — fallback ke botasaurus", e)
+        # botasaurus fallback
+        from botasaurus_requests import Session  # type: ignore
+
+        _session = Session(browser="chrome", os="lin")
+        _session_kind = "botasaurus"
+        log.info("HTTP session: botasaurus_requests")
         return _session
 
 
