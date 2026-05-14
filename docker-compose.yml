@@ -19,6 +19,17 @@ services:
       # Persist scraped images & cache di luar container.
       - storage_data:/var/www/html/storage
 
+  scraper:
+    image: mpratamamail/bacakomik-scraper:v1.5.1
+    restart: unless-stopped
+    ports:
+      - "8081:8000"
+    environment:
+      SCRAPER_API_KEY: devtest123
+      COMMENTS_DB_PATH: /data/comments.db
+    volumes:
+      - scraper_data:/data
+
   db:
     image: mariadb:11
     restart: unless-stopped
@@ -38,3 +49,4 @@ services:
 volumes:
   db_data:
   storage_data:
+  scraper_data:

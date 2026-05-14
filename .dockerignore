@@ -1,0 +1,12 @@
+.git
+.github
+.vscode
+node_modules
+storage/cache
+storage/comics
+storage/covers
+scraper-service
+*.md
+.env
+.env.local
+docker-compose.yml
