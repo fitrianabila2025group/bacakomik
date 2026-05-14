@@ -4,6 +4,7 @@ namespace App\Controllers\Admin;
 use App\Csrf;
 use App\Database;
 use App\Services\Scraper\KomikuScraper;
+use App\Services\Scraper\ScraperFactory;
 
 class ImportController extends AdminController
 {
@@ -12,9 +13,11 @@ class ImportController extends AdminController
         $jobs = Database::fetchAll('SELECT * FROM import_jobs ORDER BY id DESC LIMIT 20');
         $logs = Database::fetchAll('SELECT * FROM import_logs ORDER BY id DESC LIMIT 50');
         return $this->view('admin/import', [
-            'title' => 'Import',
-            'jobs'  => $jobs,
-            'logs'  => $logs,
+            'title'    => 'Import',
+            'jobs'     => $jobs,
+            'logs'     => $logs,
+            'apiMode'  => \App\Services\Scraper\ApiClient::isEnabled(),
+            'apiUrl'   => \App\Models\Setting::get('scraper_api_url', ''),
         ]);
     }
 
@@ -23,7 +26,7 @@ class ImportController extends AdminController
         Csrf::check();
         $url = trim((string)($_POST['url'] ?? ''));
         try {
-            $scraper = new KomikuScraper();
+            $scraper = ScraperFactory::make();
             $meta = $scraper->fetchComicMetadata($url);
             $chapters = $scraper->fetchChapterList($url);
             return $this->json([
@@ -150,7 +153,7 @@ class ImportController extends AdminController
                 $seeds = array_values(array_filter(array_map('trim', preg_split('/\r?\n/', $raw))));
             }
 
-            $scraper = new KomikuScraper();
+            $scraper = ScraperFactory::make();
             $urls = [];
             if (!$seeds) {
                 try { $urls = $scraper->crawlSitemap(); } catch (\Throwable $_) {}
@@ -196,7 +199,7 @@ class ImportController extends AdminController
             'message'  => 'Importing ' . ($offset + 1) . "/$total : $u",
         ], 'id = :id', ['id' => $id]);
 
-        $scraper = new KomikuScraper();
+        $scraper = ScraperFactory::make();
         // Per-chapter progress di field message supaya user lihat aktivitas.
         $perChapterCb = function ($done, $total2, $msg) use ($id, $offset, $total, $u) {
             Database::update('import_jobs', [
@@ -256,7 +259,7 @@ class ImportController extends AdminController
             'message'  => 'Bulk ' . ($offset + 1) . "/$total : $u",
         ], 'id = :id', ['id' => $id]);
 
-        $scraper = new KomikuScraper();
+        $scraper = ScraperFactory::make();
         try {
             $scraper->importFullComic($u);
             $finalMsg = ($offset + 1) . "/$total : $u — OK";
@@ -304,7 +307,7 @@ class ImportController extends AdminController
 
         Database::update('import_jobs', ['status' => 'running', 'message' => 'Mulai...'], 'id = :id', ['id' => $jobId]);
 
-        $scraper = new KomikuScraper();
+        $scraper = ScraperFactory::make();
         $progressCb = function ($done, $total, $msg) use ($jobId) {
             Database::update('import_jobs', [
                 'progress' => $done, 'total' => $total, 'message' => $msg,

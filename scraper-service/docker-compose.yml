@@ -1,0 +1,12 @@
+version: "3.9"
+services:
+  scraper:
+    build: .
+    container_name: bacakomik-scraper
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./cache:/app/cache

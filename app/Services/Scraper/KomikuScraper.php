@@ -19,9 +19,9 @@ use DOMXPath;
  */
 class KomikuScraper implements ScraperInterface
 {
-    private array $config;
-    private ImageDownloader $downloader;
-    private string $cacheDir;
+    protected array $config;
+    protected ImageDownloader $downloader;
+    protected string $cacheDir;
 
     public function __construct(array $config = [])
     {

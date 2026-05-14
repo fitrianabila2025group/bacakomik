@@ -13,11 +13,20 @@ class ImageDownloader
         'image/gif'  => 'gif',
     ];
 
+    /** @var string[] Extra HTTP headers sent on every request (e.g. X-API-Key for proxy). */
+    private array $extraHeaders = [];
+
     public function __construct(
         private string $userAgent = 'BacaKomikBot/1.0',
         private int $timeout = 30,
         private int $maxRetries = 3
     ) {}
+
+    /** Set additional headers (replaces previous list). */
+    public function setExtraHeaders(array $headers): void
+    {
+        $this->extraHeaders = array_values($headers);
+    }
 
     /**
      * Download an image to $destPathNoExt. Returns full saved path or false on failure.
@@ -41,10 +50,10 @@ class ImageDownloader
                 CURLOPT_FOLLOWLOCATION => true,
                 CURLOPT_TIMEOUT        => $this->timeout,
                 CURLOPT_USERAGENT      => $this->userAgent,
-                CURLOPT_HTTPHEADER     => array_filter([
+                CURLOPT_HTTPHEADER     => array_merge(array_filter([
                     $referer ? 'Referer: ' . $referer : null,
                     'Accept: image/*,*/*;q=0.8',
-                ]),
+                ]), $this->extraHeaders),
                 CURLOPT_FAILONERROR    => true,
             ]);
             $ok = curl_exec($ch);
@@ -120,10 +129,10 @@ class ImageDownloader
                 CURLOPT_FOLLOWLOCATION => true,
                 CURLOPT_TIMEOUT        => $this->timeout,
                 CURLOPT_USERAGENT      => $this->userAgent,
-                CURLOPT_HTTPHEADER     => array_filter([
+                CURLOPT_HTTPHEADER     => array_merge(array_filter([
                     $referer ? 'Referer: ' . $referer : null,
                     'Accept: image/*,*/*;q=0.8',
-                ]),
+                ]), $this->extraHeaders),
                 CURLOPT_FAILONERROR    => true,
             ]);
             curl_multi_add_handle($mh, $ch);

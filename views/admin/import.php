@@ -1,5 +1,18 @@
-<?php /** @var array $jobs @var array $logs */ ?>
+<?php /** @var array $jobs @var array $logs @var bool $apiMode @var string $apiUrl */ ?>
 <h1 class="page-title">Import dari Komiku</h1>
+
+<div class="card" style="border-left:4px solid <?= $apiMode ? '#16a34a' : '#9ca3af' ?>;">
+  <strong>Mode scraper:</strong>
+  <?php if ($apiMode): ?>
+    <span style="color:#16a34a;font-weight:600;">REMOTE API</span> &mdash;
+    <code><?= htmlspecialchars($apiUrl) ?></code>
+    <small class="muted">(scraping dilakukan di service Python eksternal, tahan Cloudflare)</small>
+  <?php else: ?>
+    <span style="color:#9ca3af;font-weight:600;">LOCAL (PHP curl)</span>
+    <small class="muted">&mdash; aktifkan Remote API di <a href="/admin/settings">Settings &rarr; Scraper API</a> bila gagal terus.</small>
+  <?php endif; ?>
+</div>
+
 
 <div class="grid-2">
   <div class="card">

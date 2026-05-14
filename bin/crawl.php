@@ -35,6 +35,7 @@ ini_set('memory_limit', '512M');
 
 use App\Database;
 use App\Services\Scraper\KomikuScraper;
+use App\Services\Scraper\ScraperFactory;
 
 Database::init(require BASE_PATH . '/config/database.php');
 
@@ -75,7 +76,7 @@ if ($jobId > 0) {
 
 Database::update('import_jobs', ['status' => 'running', 'message' => 'Discovery...'], 'id = :id', ['id' => $jobId]);
 
-$scraper = new KomikuScraper();
+$scraper = ScraperFactory::make();
 
 $progressCb = function ($done, $total, $msg) use ($jobId) {
     Database::update('import_jobs', [

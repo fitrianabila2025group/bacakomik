@@ -155,6 +155,24 @@ new KomikuScraper(['selectors' => ['title' => '//h1[@class="entry-title"]']]);
   `storage/` langsung sebagai static (boleh tambah header Cache-Control).
 - Untuk Apache: `.htaccess` di root meneruskan request ke `public/`.
 
+## 9. Remote Scraper Service (Cloudflare Bypass)
+
+Bila scraper PHP lokal selalu gagal di shared hosting (timeout, CF block,
+exec disabled, dsb), aktifkan **Remote Scraper API** — service Python
++ Botasaurus terpisah yang dideploy ke **Railway** atau **VPS**.
+
+1. Lihat folder [`scraper-service/`](scraper-service/README.md) untuk source +
+   `Dockerfile` + `railway.json`.
+2. Deploy → dapatkan URL publik (mis. `https://xxxx.up.railway.app`) dan
+   `SCRAPER_API_KEY`.
+3. Login ke admin BacaKomik → **Settings → Scraper API**:
+   - centang **Pakai Remote Scraper API**
+   - isi **API URL** dan **API Key**
+   - klik **Test Connection**
+4. Selesai. Halaman **Admin → Import** dan CLI `php bin/crawl.php` otomatis
+   memakai service tersebut. HTML & gambar di-pull lewat IP service
+   (bypass Cloudflare via `botasaurus_requests` atau headless Chrome).
+
 ---
 
 © BacaKomik — internal build untuk tim Komiku.

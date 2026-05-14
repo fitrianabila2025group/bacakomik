@@ -26,3 +26,7 @@ storage/cache/*.log
 *.swp
 *.swo
 Thumbs.db
+
+# Botasaurus reference archive (75MB) — only used as local source material
+botasaurus-master.zip
+botasaurus-master/

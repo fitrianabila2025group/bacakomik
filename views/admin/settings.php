@@ -36,5 +36,41 @@
     <input type="text" name="scraper_whitelist" value="<?= htmlspecialchars($settings['scraper_whitelist'] ?? '') ?>">
   </label>
 
+  <h3>Scraper API (Remote – Railway / VPS)</h3>
+  <p class="muted">Aktifkan supaya semua proses scraping (discovery, metadata, gambar) di-handle oleh service Python
+    <code>scraper-service</code> di luar shared hosting (mis. Railway). Cocok bila Cloudflare/host meng-block scraper PHP lokal.</p>
+  <div class="grid-2">
+    <label class="check"><input type="checkbox" name="scraper_use_api" value="1" <?= ($settings['scraper_use_api'] ?? '0') === '1' ? 'checked' : '' ?>> Pakai Remote Scraper API</label>
+    <label>API Timeout (detik)
+      <input type="number" name="scraper_api_timeout" value="<?= htmlspecialchars($settings['scraper_api_timeout'] ?? '120') ?>" min="10">
+    </label>
+  </div>
+  <label>API URL
+    <input type="url" name="scraper_api_url" placeholder="https://xxxx.up.railway.app" value="<?= htmlspecialchars($settings['scraper_api_url'] ?? '') ?>">
+  </label>
+  <label>API Key (X-API-Key)
+    <input type="text" name="scraper_api_key" autocomplete="off" value="<?= htmlspecialchars($settings['scraper_api_key'] ?? '') ?>">
+  </label>
+  <div class="row">
+    <button class="btn-ghost" type="button" id="btn-test-scraper-api">Test Connection</button>
+    <span id="scraper-api-status" class="muted"></span>
+  </div>
+
   <button class="btn-primary" type="submit">Simpan</button>
 </form>
+
+<script>
+document.getElementById('btn-test-scraper-api')?.addEventListener('click', async () => {
+  const url = document.querySelector('[name=scraper_api_url]').value.trim();
+  const key = document.querySelector('[name=scraper_api_key]').value.trim();
+  const out = document.getElementById('scraper-api-status');
+  if (!url) { out.textContent = 'Isi API URL dulu.'; return; }
+  out.textContent = 'Menguji...';
+  try {
+    const r = await fetch(url.replace(/\/$/, '') + '/health', { headers: key ? { 'X-API-Key': key } : {} });
+    const j = await r.json();
+    out.textContent = r.ok ? ('OK — mode: ' + (j.mode || '?')) : ('Gagal: ' + (j.detail || r.status));
+    out.style.color = r.ok ? 'green' : 'crimson';
+  } catch (e) { out.textContent = 'Error: ' + e.message; out.style.color = 'crimson'; }
+});
+</script>

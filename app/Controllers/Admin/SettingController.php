@@ -24,9 +24,14 @@ class SettingController extends AdminController
             'maintenance_mode','allow_registration',
             'scraper_delay','scraper_timeout','scraper_user_agent',
             'scraper_concurrent','scraper_whitelist',
+            'scraper_use_api','scraper_api_url','scraper_api_key','scraper_api_timeout',
         ];
         foreach ($keys as $k) {
             $val = $_POST[$k] ?? '';
+            // checkboxes default to '0' when unchecked
+            if ($k === 'scraper_use_api' || $k === 'maintenance_mode' || $k === 'allow_registration') {
+                $val = !empty($_POST[$k]) ? '1' : '0';
+            }
             Setting::set($k, (string)$val);
         }
         // logo/favicon upload
