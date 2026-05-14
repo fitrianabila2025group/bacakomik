@@ -26,12 +26,27 @@ class SettingController extends AdminController
             'scraper_concurrent','scraper_whitelist',
             'scraper_use_api','scraper_api_url','scraper_api_key','scraper_api_timeout',
             'scraper_remote_storage','scraper_proxy_public',
+            // CAPTCHA
+            'captcha_provider','captcha_site_key','captcha_secret_key','captcha_score_min',
+            'captcha_on_register','captcha_on_login','captcha_on_comment',
+            // Comments (Railway service)
+            'comments_enabled','comments_on_comic','comments_on_chapter','comments_guest_allowed',
+            'comments_api_url','comments_hmac_secret',
         ];
         foreach ($keys as $k) {
             $val = $_POST[$k] ?? '';
             // checkboxes default to '0' when unchecked
-            if (in_array($k, ['scraper_use_api','scraper_remote_storage','scraper_proxy_public','maintenance_mode','allow_registration'], true)) {
+            if (in_array($k, [
+                'scraper_use_api','scraper_remote_storage','scraper_proxy_public',
+                'maintenance_mode','allow_registration',
+                'captcha_on_register','captcha_on_login','captcha_on_comment',
+                'comments_enabled','comments_on_comic','comments_on_chapter','comments_guest_allowed',
+            ], true)) {
                 $val = !empty($_POST[$k]) ? '1' : '0';
+            }
+            // Validate captcha provider whitelist
+            if ($k === 'captcha_provider' && !in_array($val, \App\Captcha::PROVIDERS, true)) {
+                $val = 'none';
             }
             Setting::set($k, (string)$val);
         }

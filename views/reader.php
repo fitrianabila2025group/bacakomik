@@ -41,3 +41,7 @@
     <?php else: ?><span></span><?php endif; ?>
   </div>
 </nav>
+
+<div class="container" style="max-width:900px;margin:1.5rem auto">
+  <?= \App\Comments::render('chapter', 'chapter:' . (int)$chapter['id']) ?>
+</div>

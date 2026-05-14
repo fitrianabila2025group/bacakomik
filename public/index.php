@@ -4,6 +4,14 @@
  */
 declare(strict_types=1);
 
+// --- Session hardening (must run before session_start) ---
+$secureCookie = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+ini_set('session.use_strict_mode', '1');
+ini_set('session.use_only_cookies', '1');
+ini_set('session.cookie_httponly', '1');
+ini_set('session.cookie_samesite', 'Lax');
+if ($secureCookie) ini_set('session.cookie_secure', '1');
 session_start();
 
 define('BASE_PATH', dirname(__DIR__));

@@ -26,21 +26,34 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from . import scraper
+from .comments import router as comments_router, init_db as comments_init_db
 from .config import get_settings
 from .fetcher import fetch_bytes
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("api")
 
-app = FastAPI(title="BacaKomik Scraper API", version="1.4.1")
+app = FastAPI(title="BacaKomik Scraper API", version="1.5.0")
 
 _settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_settings.cors_origins,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# Mount comments service (separate prefix, separate auth via HMAC user token)
+app.include_router(comments_router)
+
+
+@app.on_event("startup")
+def _boot() -> None:
+    try:
+        comments_init_db()
+        log.info("comments db initialized")
+    except Exception as e:
+        log.warning("comments init failed: %s", e)
 
 
 def require_key(request: Request) -> None:

@@ -71,6 +71,60 @@
     <span id="scraper-api-status" class="muted"></span>
   </div>
 
+  <h3>CAPTCHA (anti-spam registrasi & login)</h3>
+  <p class="muted">Lindungi form daftar/login dari bot. Pilih satu provider, daftar key di dashboard provider, lalu paste Site Key + Secret Key di sini.</p>
+  <?php $cp = $settings['captcha_provider'] ?? 'none'; ?>
+  <div class="grid-2">
+    <label>Provider
+      <select name="captcha_provider">
+        <option value="none"          <?= $cp==='none'?'selected':''?>>Nonaktif</option>
+        <option value="turnstile"     <?= $cp==='turnstile'?'selected':''?>>Cloudflare Turnstile (gratis, rekomendasi)</option>
+        <option value="recaptcha_v2"  <?= $cp==='recaptcha_v2'?'selected':''?>>Google reCAPTCHA v2 (checkbox)</option>
+        <option value="recaptcha_v3"  <?= $cp==='recaptcha_v3'?'selected':''?>>Google reCAPTCHA v3 (invisible score)</option>
+        <option value="hcaptcha"      <?= $cp==='hcaptcha'?'selected':''?>>hCaptcha</option>
+      </select>
+    </label>
+    <label>Min. Score (reCAPTCHA v3 saja, 0.0–1.0)
+      <input type="number" step="0.1" min="0" max="1" name="captcha_score_min" value="<?= htmlspecialchars($settings['captcha_score_min'] ?? '0.5') ?>">
+    </label>
+  </div>
+  <label>Site Key (public)
+    <input type="text" name="captcha_site_key" autocomplete="off" value="<?= htmlspecialchars($settings['captcha_site_key'] ?? '') ?>">
+  </label>
+  <label>Secret Key (rahasia, server-side)
+    <input type="text" name="captcha_secret_key" autocomplete="off" value="<?= htmlspecialchars($settings['captcha_secret_key'] ?? '') ?>">
+  </label>
+  <div class="row">
+    <label class="check"><input type="checkbox" name="captcha_on_register" value="1" <?= ($settings['captcha_on_register'] ?? '0')==='1'?'checked':'' ?>> Aktif di /register</label>
+    <label class="check"><input type="checkbox" name="captcha_on_login" value="1" <?= ($settings['captcha_on_login'] ?? '0')==='1'?'checked':'' ?>> Aktif di /login</label>
+    <label class="check"><input type="checkbox" name="captcha_on_comment" value="1" <?= ($settings['captcha_on_comment'] ?? '0')==='1'?'checked':'' ?>> Aktif di komentar</label>
+  </div>
+  <p class="muted" style="font-size:.85em">
+    📚 Daftar key:
+    <a href="https://dash.cloudflare.com/?to=/:account/turnstile" target="_blank" rel="noopener">Turnstile</a> ·
+    <a href="https://www.google.com/recaptcha/admin" target="_blank" rel="noopener">reCAPTCHA</a> ·
+    <a href="https://dashboard.hcaptcha.com/sites" target="_blank" rel="noopener">hCaptcha</a>
+  </p>
+
+  <h3>Komentar (service di Railway)</h3>
+  <p class="muted">Backend komentar berjalan di Railway (FastAPI), shared host hanya menampilkan widget JS. Set URL service & HMAC secret di bawah, lalu set ENV yang sama di Railway.</p>
+  <div class="row">
+    <label class="check"><input type="checkbox" name="comments_enabled" value="1" <?= ($settings['comments_enabled'] ?? '0')==='1'?'checked':'' ?>> Aktifkan komentar</label>
+    <label class="check"><input type="checkbox" name="comments_on_comic" value="1" <?= ($settings['comments_on_comic'] ?? '1')==='1'?'checked':'' ?>> Tampilkan di halaman komik</label>
+    <label class="check"><input type="checkbox" name="comments_on_chapter" value="1" <?= ($settings['comments_on_chapter'] ?? '1')==='1'?'checked':'' ?>> Tampilkan di halaman chapter</label>
+    <label class="check"><input type="checkbox" name="comments_guest_allowed" value="1" <?= ($settings['comments_guest_allowed'] ?? '0')==='1'?'checked':'' ?>> Izinkan guest (tanpa login)</label>
+  </div>
+  <label>Comments API URL (Railway)
+    <input type="url" name="comments_api_url" placeholder="https://xxxx.up.railway.app" value="<?= htmlspecialchars($settings['comments_api_url'] ?? '') ?>">
+  </label>
+  <label>HMAC Secret (rahasia, harus sama dengan ENV <code>COMMENTS_HMAC_SECRET</code> di Railway)
+    <input type="text" name="comments_hmac_secret" autocomplete="off" value="<?= htmlspecialchars($settings['comments_hmac_secret'] ?? '') ?>">
+  </label>
+  <div class="row">
+    <button class="btn-ghost" type="button" id="btn-test-comments-api">Test Connection</button>
+    <span id="comments-api-status" class="muted"></span>
+  </div>
+
   <button class="btn-primary" type="submit">Simpan</button>
 </form>
 
@@ -85,6 +139,18 @@ document.getElementById('btn-test-scraper-api')?.addEventListener('click', async
     const r = await fetch(url.replace(/\/$/, '') + '/health', { headers: key ? { 'X-API-Key': key } : {} });
     const j = await r.json();
     out.textContent = r.ok ? ('OK — mode: ' + (j.mode || '?')) : ('Gagal: ' + (j.detail || r.status));
+    out.style.color = r.ok ? 'green' : 'crimson';
+  } catch (e) { out.textContent = 'Error: ' + e.message; out.style.color = 'crimson'; }
+});
+document.getElementById('btn-test-comments-api')?.addEventListener('click', async () => {
+  const url = document.querySelector('[name=comments_api_url]').value.trim();
+  const out = document.getElementById('comments-api-status');
+  if (!url) { out.textContent = 'Isi Comments API URL dulu.'; return; }
+  out.textContent = 'Menguji...';
+  try {
+    const r = await fetch(url.replace(/\/$/, '') + '/comments/health');
+    const j = await r.json();
+    out.textContent = r.ok ? ('OK — db: ' + (j.db || '?') + ', count: ' + (j.count ?? '?')) : ('Gagal: ' + r.status);
     out.style.color = r.ok ? 'green' : 'crimson';
   } catch (e) { out.textContent = 'Error: ' + e.message; out.style.color = 'crimson'; }
 });

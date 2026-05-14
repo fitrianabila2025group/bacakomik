@@ -18,6 +18,10 @@ class Auth
         if (!$user || !password_verify($password, $user['password_hash'])) {
             return false;
         }
+        // Mitigate session fixation: roll the session id on privilege change.
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_regenerate_id(true);
+        }
         $_SESSION['user_id'] = (int)$user['id'];
         $_SESSION['user_role'] = $user['role'];
         return true;

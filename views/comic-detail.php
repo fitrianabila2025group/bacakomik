@@ -74,3 +74,7 @@ $cover = $comic['cover_image'] ? imgproxy($comic['cover_image']) : '/assets/img/
 </div>
 
 <?php ad('detail_bottom'); ?>
+
+<div class="container">
+  <?= \App\Comments::render('comic', 'comic:' . $comic['slug']) ?>
+</div>
