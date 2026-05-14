@@ -176,7 +176,9 @@ class ImportController extends AdminController
             return;
         }
 
-        // Phase 2: import 1 komik per tick.
+        // Phase 2: import komik. Pre-increment progress dulu sebelum work, supaya
+        // kalau tick di-kill mid-import (LiteSpeed timeout) tick berikutnya pindah
+        // ke komik selanjutnya — bukan terjebak ulang di komik yang sama.
         $urls   = json_decode((string)file_get_contents($urlsFile), true) ?: [];
         $offset = (int)$job['progress'];
         $total  = count($urls);
@@ -187,17 +189,33 @@ class ImportController extends AdminController
         }
 
         $u = $urls[$offset];
-        $msg = ($offset + 1) . "/$total : $u";
+        // Pre-update: progress maju + message live sebelum import jalan.
+        Database::update('import_jobs', [
+            'progress' => $offset + 1,
+            'total'    => $total,
+            'message'  => 'Importing ' . ($offset + 1) . "/$total : $u",
+        ], 'id = :id', ['id' => $id]);
+
         $scraper = new KomikuScraper();
-        try { $scraper->importFullComic($u); }
-        catch (\Throwable $e) { $msg .= ' (err: ' . substr($e->getMessage(), 0, 80) . ')'; }
+        // Per-chapter progress di field message supaya user lihat aktivitas.
+        $perChapterCb = function ($done, $total2, $msg) use ($id, $offset, $total, $u) {
+            Database::update('import_jobs', [
+                'message' => 'Importing ' . ($offset + 1) . "/$total : $u — chapter $done/$total2",
+            ], 'id = :id', ['id' => $id]);
+        };
+        try {
+            $scraper->importFullComic($u, $perChapterCb);
+            $finalMsg = ($offset + 1) . "/$total : $u — OK";
+        } catch (\Throwable $e) {
+            $finalMsg = ($offset + 1) . "/$total : $u — err: " . substr($e->getMessage(), 0, 120);
+        }
         $offset++;
 
         $cur = Database::fetch('SELECT status FROM import_jobs WHERE id = ?', [$id]);
         if ($cur && $cur['status'] === 'cancelled') return;
 
         $newStatus = $offset >= $total ? 'done' : 'running';
-        $finalMsg  = $offset >= $total ? "Selesai $total komik" : $msg;
+        if ($newStatus === 'done') $finalMsg = "Selesai $total komik";
         Database::update('import_jobs', [
             'status'   => $newStatus,
             'progress' => $offset,
@@ -232,17 +250,26 @@ class ImportController extends AdminController
         }
 
         $u = $urls[$offset];
-        $msg = ($offset + 1) . "/$total : $u";
+        // Pre-increment supaya tahan timeout (sama dengan tickSite).
+        Database::update('import_jobs', [
+            'progress' => $offset + 1, 'total' => $total,
+            'message'  => 'Bulk ' . ($offset + 1) . "/$total : $u",
+        ], 'id = :id', ['id' => $id]);
+
         $scraper = new KomikuScraper();
-        try { $scraper->importFullComic($u); }
-        catch (\Throwable $e) { $msg .= ' (err: ' . substr($e->getMessage(), 0, 80) . ')'; }
+        try {
+            $scraper->importFullComic($u);
+            $finalMsg = ($offset + 1) . "/$total : $u — OK";
+        } catch (\Throwable $e) {
+            $finalMsg = ($offset + 1) . "/$total : $u — err: " . substr($e->getMessage(), 0, 120);
+        }
         $offset++;
 
         $cur = Database::fetch('SELECT status FROM import_jobs WHERE id = ?', [$id]);
         if ($cur && $cur['status'] === 'cancelled') return;
 
         $newStatus = $offset >= $total ? 'done' : 'running';
-        $finalMsg  = $offset >= $total ? "Selesai $total komik" : $msg;
+        if ($newStatus === 'done') $finalMsg = "Selesai $total komik";
         Database::update('import_jobs', [
             'status'   => $newStatus,
             'progress' => $offset,
