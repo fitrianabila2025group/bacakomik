@@ -170,7 +170,7 @@ class ApiScraper extends KomikuScraper
             'status'     => $meta['status'] ?? 'Ongoing',
             'synopsis'   => $meta['synopsis'] ?? null,
             'rating'     => $meta['rating'] ?? 0,
-            'views'      => $meta['views'] ?? 0,
+            'views'      => 0, // original count for bacakomik.io, di-increment via ComicController.
             'source_url' => $url,
         ];
         if (!empty($meta['cover_url'])) {
@@ -246,7 +246,7 @@ class ApiScraper extends KomikuScraper
             'author' => $meta['author'] ?? null, 'artist' => $meta['artist'] ?? null,
             'type' => $meta['type'] ?? 'Manga', 'status' => $meta['status'] ?? 'Ongoing',
             'synopsis' => $meta['synopsis'] ?? null,
-            'rating' => $meta['rating'] ?? 0, 'views' => $meta['views'] ?? 0,
+            'rating' => $meta['rating'] ?? 0, 'views' => 0,
             'source_url' => $url,
         ];
         if (!empty($meta['cover_url'])) $data['cover_image'] = $meta['cover_url'];
@@ -301,7 +301,7 @@ class ApiScraper extends KomikuScraper
                 'title'          => $ch['title'] ?: ('Chapter ' . $ch['number']),
                 'slug'           => $chSlug,
                 'source_url'     => $ch['url'],
-                'views'          => $ch['views'] ?? 0,
+                'views'          => 0,
             ]);
         }
 
@@ -386,7 +386,7 @@ class ApiScraper extends KomikuScraper
                 'title'          => $ch['title'] ?: ('Chapter ' . $ch['number']),
                 'slug'           => $chSlug,
                 'source_url'     => $ch['url'],
-                'views'          => $ch['views'] ?? 0,
+                'views'          => 0,
             ]);
         }
 
