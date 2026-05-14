@@ -82,7 +82,7 @@ class Settings:
     whitelist: List[str] = _split_csv(
         os.getenv(
             "SCRAPER_WHITELIST",
-            "komiku.org,komiku.id,img.komiku.org,mangaku.top,img.mangaku.top,cover.mangaku.top",
+            "komiku.org,komiku.id,mangaku.top",
         )
     )
     user_agent: str = os.getenv(

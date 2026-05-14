@@ -32,7 +32,7 @@ COPY app/ ./app/
 ENV HOST=0.0.0.0 \
     PORT=8080 \
     SCRAPER_MODE=request \
-    SCRAPER_WHITELIST="komiku.org,komiku.id,img.komiku.org,mangaku.top,img.mangaku.top,cover.mangaku.top" \
+    SCRAPER_WHITELIST="komiku.org,komiku.id,mangaku.top" \
     SCRAPER_TIMEOUT=45 \
     SCRAPER_CACHE_TTL=3600 \
     SCRAPER_PROXY_PUBLIC=1 \

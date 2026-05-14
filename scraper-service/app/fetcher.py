@@ -22,7 +22,9 @@ from .config import get_settings
 log = logging.getLogger("fetcher")
 
 _CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cache")
+_IMG_CACHE_DIR = os.path.join(_CACHE_DIR, "img")
 os.makedirs(_CACHE_DIR, exist_ok=True)
+os.makedirs(_IMG_CACHE_DIR, exist_ok=True)
 
 _session = None  # botasaurus_requests session (lazy)
 _session_lock = threading.Lock()
@@ -150,21 +152,87 @@ def fetch_html(url: str, referer: Optional[str] = None, *, force: bool = False) 
 def fetch_bytes(url: str, referer: Optional[str] = None) -> Tuple[bytes, str]:
     """
     Fetch raw bytes (for image proxy). Returns (content, content_type).
-    Uses the request backend even when MODE=browser (image CDNs rarely need CF bypass).
+
+    Strategy:
+      1. Disk-cache by URL hash on Railway -> ulang request gambar yg sama tidak
+         mengetuk komiku/Cloudflare lagi (anti-403, hemat bandwidth).
+      2. Browser-like headers (Sec-Fetch-*, Accept, Accept-Language) supaya
+         hotlink protection lebih jarang menolak.
+      3. Bila 403/429: warm-up sesi dgn GET ke referer (bawa cookie CF), retry.
     """
     if not host_allowed(url):
         raise PermissionError(f"Host tidak ada di whitelist: {url}")
 
+    # 1) disk cache
+    h = hashlib.md5(url.encode()).hexdigest()
+    bin_path = os.path.join(_IMG_CACHE_DIR, h + ".bin")
+    ct_path = os.path.join(_IMG_CACHE_DIR, h + ".ct")
+    if os.path.isfile(bin_path) and os.path.isfile(ct_path):
+        try:
+            with open(bin_path, "rb") as f:
+                body = f.read()
+            with open(ct_path, "r", encoding="utf-8") as f:
+                ctype = (f.read().strip() or "application/octet-stream")
+            if body:
+                return body, ctype
+        except OSError:
+            pass
+
     s = get_settings()
     sess = _get_request_session()
     headers = {
-        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9,id;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Sec-Fetch-Dest": "image",
+        "Sec-Fetch-Mode": "no-cors",
+        "Sec-Fetch-Site": "cross-site",
+        "Cache-Control": "no-cache",
     }
-    if referer:
-        headers["Referer"] = referer
-    resp = sess.get(url, headers=headers, timeout=s.timeout)
-    if resp.status_code >= 400:
-        raise RuntimeError(f"HTTP {resp.status_code} fetching {url}")
-    ctype = resp.headers.get("Content-Type", "application/octet-stream")
-    return resp.content, ctype
+    # Default referer: pakai homepage host gambar -> sering lolos hotlink check.
+    if not referer:
+        host = urlparse(url).hostname or ""
+        if host:
+            # turunkan ke domain root (komiku.org untuk thumbnail.komiku.org)
+            parts = host.split(".")
+            root = ".".join(parts[-2:]) if len(parts) >= 2 else host
+            referer = f"https://{root}/"
+    headers["Referer"] = referer
+
+    last_err: Optional[Exception] = None
+    for attempt in range(1, 4):
+        try:
+            resp = sess.get(url, headers=headers, timeout=s.timeout)
+            if 200 <= resp.status_code < 300 and resp.content:
+                body = resp.content
+                ctype = resp.headers.get("Content-Type", "application/octet-stream")
+                # tulis disk cache (best effort)
+                try:
+                    with open(bin_path, "wb") as f:
+                        f.write(body)
+                    with open(ct_path, "w", encoding="utf-8") as f:
+                        f.write(ctype)
+                except OSError:
+                    pass
+                return body, ctype
+            # Hotlink / CF block -> warm-up via referer page lalu retry.
+            if resp.status_code in (401, 403, 429) and attempt < 3:
+                try:
+                    sess.get(
+                        referer,
+                        headers={
+                            "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+                            "Accept-Language": headers["Accept-Language"],
+                        },
+                        timeout=s.timeout,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+                time.sleep(0.4 * attempt)
+                continue
+            last_err = RuntimeError(f"HTTP {resp.status_code} fetching {url}")
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            log.warning("fetch_bytes attempt %s for %s failed: %s", attempt, url, e)
+        time.sleep(0.4 * attempt)
+    raise last_err or RuntimeError(f"Gagal fetch {url}")

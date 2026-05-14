@@ -32,7 +32,7 @@ from .fetcher import fetch_bytes
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("api")
 
-app = FastAPI(title="BacaKomik Scraper API", version="1.2.0")
+app = FastAPI(title="BacaKomik Scraper API", version="1.3.0")
 
 _settings = get_settings()
 app.add_middleware(
@@ -52,6 +52,12 @@ def require_key(request: Request) -> None:
 
 class UrlBody(BaseModel):
     url: str = Field(..., min_length=1)
+
+
+class ComicFullBody(BaseModel):
+    url: str = Field(..., min_length=1)
+    concurrency: int = Field(6, ge=1, le=16)
+    include_images: bool = True
 
 
 def _split_csv_param(value: Optional[str]) -> Optional[List[str]]:
@@ -132,6 +138,21 @@ def scrape_images(body: UrlBody):
     try:
         images = scraper.get_chapter_images(body.url)
         return {"count": len(images), "images": images}
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.post("/scrape/comic-full", dependencies=[Depends(require_key)])
+def scrape_comic_full(body: ComicFullBody):
+    """
+    Bulk: 1 HTTP call -> metadata + chapter list + semua image URLs.
+    Dipakai oleh shared hosting agar 1 import komik = 1 round-trip
+    (bukan 1 + 1 + N) sehingga website tidak ter-blok PHP-FPM worker.
+    """
+    try:
+        return scraper.get_comic_full(body.url, body.concurrency, body.include_images)
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001

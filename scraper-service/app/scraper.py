@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional
 
 from . import parsers
@@ -38,6 +39,40 @@ def get_chapters(url: str) -> List[dict]:
 def get_chapter_images(url: str) -> List[str]:
     html = fetch_html(url)
     return parsers.parse_chapter_images(html, url)
+
+
+def get_comic_full(url: str, concurrency: int = 6, include_images: bool = True) -> dict:
+    """
+    One-shot: scrape metadata + chapter list + (optionally) every chapter's
+    image URLs concurrently. Membuat shared-hosting hanya butuh 1 HTTP call
+    per komik (bukan 1 + 1 + N call) sehingga PHP-FPM worker tidak hang.
+    """
+    html = fetch_html(url)
+    meta = parsers.parse_comic_metadata(html, url)
+    chapters = parsers.parse_chapter_list(html, url)
+
+    if include_images and chapters:
+        max_workers = max(1, min(int(concurrency or 6), 16))
+
+        def _scrape(ch: dict) -> tuple:
+            try:
+                imgs = get_chapter_images(ch["url"])
+                return ch["url"], imgs, None
+            except Exception as e:  # noqa: BLE001
+                return ch["url"], [], str(e)
+
+        results: dict = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            for ch_url, imgs, err in ex.map(_scrape, chapters):
+                results[ch_url] = (imgs, err)
+
+        for ch in chapters:
+            imgs, err = results.get(ch["url"], ([], "missing"))
+            ch["images"] = imgs
+            if err:
+                ch["error"] = err
+
+    return {"meta": meta, "chapters": chapters}
 
 
 def discover_via_sitemap(sitemap_urls: Optional[List[str]] = None, max_depth: int = 4) -> List[str]:

@@ -120,19 +120,41 @@ class ApiScraper extends KomikuScraper
 
     /**
      * Import komik tanpa men-download gambar: cukup INSERT URL proxy ke DB.
+     *
+     * Pakai endpoint bulk `/scrape/comic-full` (service v1.3+) supaya hanya
+     * 1 round-trip HTTP per komik (bukan 1 + 1 + N). Otomatis fallback ke
+     * pipeline per-call kalau endpoint tsb belum tersedia.
      */
     public function importFullComic(string $url, ?callable $progressCallback = null): array
     {
         if (!$this->isRemoteStorage()) {
-            // Pakai pipeline lama (download ke disk lokal).
             return parent::importFullComic($url, $progressCallback);
         }
 
-        $this->logEvent('info', $url, 'Mulai import komik (remote-storage)');
-        $meta = $this->fetchComicMetadata($url);
+        $this->logEvent('info', $url, 'Mulai import komik (bulk remote)');
 
+        // 1 ROUND-TRIP: ambil metadata + chapters + semua image URL sekaligus.
+        try {
+            $bulk = $this->api->post('/scrape/comic-full', [
+                'url'            => $url,
+                'concurrency'    => max(2, min(12, (int)Setting::get('scraper_concurrency', '6'))),
+                'include_images' => true,
+            ]);
+        } catch (\Throwable $e) {
+            // Fallback: service lama belum punya /scrape/comic-full.
+            $this->logEvent('warning', $url, '/scrape/comic-full gagal, fallback per-call: ' . $e->getMessage());
+            return $this->importFullComicFallback($url, $progressCallback);
+        }
+
+        $meta = $bulk['meta'] ?? [];
+        $chapters = $bulk['chapters'] ?? [];
         if (empty($meta['title'])) {
             throw new \RuntimeException('Gagal mengambil judul komik dari ' . $url);
+        }
+
+        // Cover -> URL proxy publik.
+        if (!empty($meta['cover_url'])) {
+            $meta['cover_url'] = $this->api->proxyUrl($meta['cover_url'], $url, true);
         }
 
         $existing = Database::fetch('SELECT * FROM comics WHERE source_url = ?', [$url]);
@@ -152,7 +174,7 @@ class ApiScraper extends KomikuScraper
             'source_url' => $url,
         ];
         if (!empty($meta['cover_url'])) {
-            $data['cover_image'] = $meta['cover_url']; // sudah berupa URL /proxy
+            $data['cover_image'] = $meta['cover_url'];
         }
 
         if ($existing) {
@@ -163,31 +185,41 @@ class ApiScraper extends KomikuScraper
         }
 
         $genreIds = [];
-        foreach ((array)$meta['genres'] as $gname) {
+        foreach ((array)($meta['genres'] ?? []) as $gname) {
             $genreIds[] = Genre::findOrCreate($gname);
         }
         if ($genreIds) Comic::syncGenres($comicId, $genreIds);
 
-        $chapters = $this->fetchChapterList($url);
         $totalChapters = count($chapters);
         $totalImages = 0;
         $errors = [];
 
         if ($progressCallback) $progressCallback(0, $totalChapters, "0 dari $totalChapters chapter");
 
+        $publicSafe = $this->isProxyPublic();
         foreach ($chapters as $i => $ch) {
+            $rawImages = (array)($ch['images'] ?? []);
+            // bungkus ke URL proxy (publik) — sekali kerjain di PHP, tidak perlu HTTP.
+            $imgs = [];
+            foreach ($rawImages as $u) {
+                if ($u === '') continue;
+                $imgs[] = $this->api->proxyUrl($u, $ch['url'] ?? $url, $publicSafe);
+            }
             try {
-                $totalImages += $this->importChapterRemote($comicId, $slug, $ch);
+                $totalImages += $this->insertChapterImages($comicId, $slug, $ch, $imgs);
             } catch (\Throwable $e) {
-                $errors[] = $ch['url'] . ' :: ' . $e->getMessage();
-                $this->logEvent('error', $ch['url'], $e->getMessage());
+                $errors[] = ($ch['url'] ?? '?') . ' :: ' . $e->getMessage();
+                $this->logEvent('error', $ch['url'] ?? $url, $e->getMessage());
+            }
+            if (!empty($ch['error'])) {
+                $errors[] = ($ch['url'] ?? '?') . ' :: ' . $ch['error'];
             }
             if ($progressCallback) {
                 $progressCallback($i + 1, $totalChapters, ($i + 1) . " dari $totalChapters chapter");
             }
         }
 
-        $this->logEvent('success', $url, "Selesai: $totalChapters chapter, $totalImages gambar (remote)");
+        $this->logEvent('success', $url, "Selesai: $totalChapters chapter, $totalImages gambar (bulk)");
 
         return [
             'comic_id' => $comicId,
@@ -195,6 +227,96 @@ class ApiScraper extends KomikuScraper
             'images'   => $totalImages,
             'errors'   => $errors,
         ];
+    }
+
+    /**
+     * Fallback per-call (versi lama) bila /scrape/comic-full tidak tersedia.
+     */
+    private function importFullComicFallback(string $url, ?callable $progressCallback): array
+    {
+        $meta = $this->fetchComicMetadata($url);
+        if (empty($meta['title'])) {
+            throw new \RuntimeException('Gagal mengambil judul komik dari ' . $url);
+        }
+        $existing = Database::fetch('SELECT * FROM comics WHERE source_url = ?', [$url]);
+        $slug = $existing ? $existing['slug'] : Comic::uniqueSlug($meta['title']);
+        $data = [
+            'title' => $meta['title'], 'slug' => $slug,
+            'alt_title' => $meta['alt_title'] ?? null,
+            'author' => $meta['author'] ?? null, 'artist' => $meta['artist'] ?? null,
+            'type' => $meta['type'] ?? 'Manga', 'status' => $meta['status'] ?? 'Ongoing',
+            'synopsis' => $meta['synopsis'] ?? null,
+            'rating' => $meta['rating'] ?? 0, 'views' => $meta['views'] ?? 0,
+            'source_url' => $url,
+        ];
+        if (!empty($meta['cover_url'])) $data['cover_image'] = $meta['cover_url'];
+        if ($existing) {
+            Database::update('comics', $data, 'id = :id', ['id' => $existing['id']]);
+            $comicId = (int)$existing['id'];
+        } else {
+            $comicId = Database::insert('comics', $data);
+        }
+        $genreIds = [];
+        foreach ((array)$meta['genres'] as $g) $genreIds[] = Genre::findOrCreate($g);
+        if ($genreIds) Comic::syncGenres($comicId, $genreIds);
+
+        $chapters = $this->fetchChapterList($url);
+        $totalChapters = count($chapters);
+        $totalImages = 0; $errors = [];
+        if ($progressCallback) $progressCallback(0, $totalChapters, "0 dari $totalChapters chapter");
+        foreach ($chapters as $i => $ch) {
+            try { $totalImages += $this->importChapterRemote($comicId, $slug, $ch); }
+            catch (\Throwable $e) { $errors[] = $ch['url'] . ' :: ' . $e->getMessage(); }
+            if ($progressCallback) $progressCallback($i + 1, $totalChapters, ($i + 1) . " dari $totalChapters chapter");
+        }
+        return ['comic_id' => $comicId, 'chapters' => $totalChapters, 'images' => $totalImages, 'errors' => $errors];
+    }
+
+    /**
+     * Insert satu chapter + gambar (URL sudah dibungkus /proxy publik).
+     */
+    protected function insertChapterImages(int $comicId, string $comicSlug, array $ch, array $imgUrls): int
+    {
+        $chSlug = SlugGenerator::make('chapter-' . $ch['number']);
+        $existing = Database::fetch(
+            'SELECT * FROM chapters WHERE comic_id = ? AND slug = ?',
+            [$comicId, $chSlug]
+        );
+        if ($existing) {
+            $chapterId = (int)$existing['id'];
+            $existingCount = (int)Database::fetch(
+                'SELECT COUNT(*) AS c FROM chapter_images WHERE chapter_id = ?',
+                [$chapterId]
+            )['c'];
+            $force = (int)Setting::get('scraper_force_refetch', '0') === 1;
+            if ($existingCount > 0 && !$force) {
+                return 0;
+            }
+            Chapter::deleteImages($chapterId);
+        } else {
+            $chSlug = Chapter::uniqueSlug($comicId, 'chapter-' . $ch['number']);
+            $chapterId = Database::insert('chapters', [
+                'comic_id'       => $comicId,
+                'chapter_number' => $ch['number'],
+                'title'          => $ch['title'] ?: ('Chapter ' . $ch['number']),
+                'slug'           => $chSlug,
+                'source_url'     => $ch['url'],
+                'views'          => $ch['views'] ?? 0,
+            ]);
+        }
+
+        $count = 0;
+        foreach ($imgUrls as $idx => $imgUrl) {
+            if ($imgUrl === '') continue;
+            Database::insert('chapter_images', [
+                'chapter_id' => $chapterId,
+                'image_path' => $imgUrl,
+                'image_url'  => $imgUrl,
+                'sort_order' => $idx + 1,
+            ]);
+            $count++;
+        }
+        return $count;
     }
 
     public function importSingleChapter(string $chapterUrl, ?int $forceComicId = null): array
