@@ -25,8 +25,17 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY app/ ./app/
 
+# Sensible defaults so platforms like Railway / Render can deploy this image
+# with an empty Variables tab and still get a working service.
+# SCRAPER_API_KEY is intentionally NOT set here -- the app auto-generates one
+# on first start and prints it to the deploy logs.
 ENV HOST=0.0.0.0 \
-    PORT=8080
+    PORT=8080 \
+    SCRAPER_MODE=request \
+    SCRAPER_WHITELIST="komiku.org,komiku.id,img.komiku.org,mangaku.top,img.mangaku.top,cover.mangaku.top" \
+    SCRAPER_TIMEOUT=45 \
+    SCRAPER_CACHE_TTL=3600 \
+    CORS_ORIGINS="*"
 
 EXPOSE 8080
 

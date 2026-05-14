@@ -17,6 +17,7 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+import os
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -63,7 +64,13 @@ def _split_csv_param(value: Optional[str]) -> Optional[List[str]]:
 @app.get("/health")
 def health():
     s = get_settings()
-    return {"ok": True, "mode": s.mode, "whitelist": s.whitelist}
+    return {
+        "ok": True,
+        "mode": s.mode,
+        "whitelist": s.whitelist,
+        # Flag supaya admin tahu key masih bawaan auto-generate (cek di deploy log).
+        "api_key_source": "env" if os.getenv("SCRAPER_API_KEY", "").strip() else "auto-generated",
+    }
 
 
 @app.get("/discover", dependencies=[Depends(require_key)])
