@@ -1,5 +1,11 @@
 # BacaKomik .htaccess (root) — serve real root files, otherwise route to public/
+DirectoryIndex index.php
+
 RewriteEngine On
+
+# 0) Khusus request "/" → langsung ke public/index.php
+#    (LiteSpeed kadang return 403 untuk directory request sebelum rewrite jalan)
+RewriteRule ^$ public/index.php [L]
 
 # 1) Jangan rewrite kalau file/dir benar-benar ada di root
 #    (install.php, robots.txt, dll. tetap bisa diakses langsung)
