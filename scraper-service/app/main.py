@@ -32,7 +32,7 @@ from .fetcher import fetch_bytes
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("api")
 
-app = FastAPI(title="BacaKomik Scraper API", version="1.4.0")
+app = FastAPI(title="BacaKomik Scraper API", version="1.4.1")
 
 _settings = get_settings()
 app.add_middleware(
@@ -177,7 +177,9 @@ def proxy(request: Request, url: str = Query(...), referer: Optional[str] = Quer
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=str(e)) from e
+        import logging
+        logging.getLogger("proxy").exception("proxy failed url=%s referer=%s", url, referer)
+        raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {e}") from e
     headers = {
         "Cache-Control": f"public, max-age={s.proxy_cache_age}, immutable",
         "Access-Control-Allow-Origin": "*",

@@ -29,9 +29,11 @@ _IMG_CACHE_DIR = os.path.join(_CACHE_DIR, "img")
 os.makedirs(_CACHE_DIR, exist_ok=True)
 os.makedirs(_IMG_CACHE_DIR, exist_ok=True)
 
-_session = None  # active session (lazy) — type tergantung mode
-_session_kind: Optional[str] = None
+# curl_cffi.Session is NOT thread-safe; gunakan satu session per thread.
+_thread_local = threading.local()
 _session_lock = threading.Lock()
+_session_kind: Optional[str] = None  # "curl_cffi" | "botasaurus" (resolved sekali)
+_logged_session_kind = False
 
 
 def _cache_key(url: str) -> str:
@@ -74,36 +76,52 @@ def host_allowed(url: str) -> bool:
     return False
 
 
-def _get_request_session():
-    """
-    Lazy-create a session.
-    Mode:
-      - 'request' (default) -> curl_cffi.requests.Session(impersonate=chrome131)
-      - 'botasaurus'        -> botasaurus_requests.Session
-    """
-    global _session, _session_kind
-    s = get_settings()
-    desired = "botasaurus" if s.mode == "botasaurus" else "curl_cffi"
+def _resolve_session_kind() -> str:
+    """Decide which library to use (process-wide). Logged once."""
+    global _session_kind, _logged_session_kind
+    if _session_kind is not None:
+        return _session_kind
     with _session_lock:
-        if _session is not None and _session_kind == desired:
-            return _session
-        if desired == "curl_cffi":
+        if _session_kind is not None:
+            return _session_kind
+        s = get_settings()
+        if s.mode != "botasaurus":
             try:
-                from curl_cffi import requests as cc_requests  # type: ignore
-
-                _session = cc_requests.Session(impersonate="chrome131")
+                import curl_cffi  # type: ignore  # noqa: F401
                 _session_kind = "curl_cffi"
-                log.info("HTTP session: curl_cffi (impersonate=chrome131)")
-                return _session
             except Exception as e:  # noqa: BLE001
                 log.warning("curl_cffi tidak tersedia (%s) — fallback ke botasaurus", e)
-        # botasaurus fallback
-        from botasaurus_requests import Session  # type: ignore
+                _session_kind = "botasaurus"
+        else:
+            _session_kind = "botasaurus"
+        if not _logged_session_kind:
+            log.info("HTTP session backend: %s", _session_kind)
+            _logged_session_kind = True
+        return _session_kind
 
-        _session = Session(browser="chrome", os="lin")
-        _session_kind = "botasaurus"
-        log.info("HTTP session: botasaurus_requests")
-        return _session
+
+def _get_request_session():
+    """
+    Return a session bound to the *current thread*.
+
+    curl_cffi (libcurl) handles are NOT safe to share across threads —
+    melakukannya menyebabkan crash diam2/'connection reset' yang muncul
+    sebagai 502 di /proxy ketika browser request banyak gambar paralel.
+    """
+    kind = _resolve_session_kind()
+    sess = getattr(_thread_local, "session", None)
+    sess_kind = getattr(_thread_local, "kind", None)
+    if sess is not None and sess_kind == kind:
+        return sess
+    if kind == "curl_cffi":
+        from curl_cffi import requests as cc_requests  # type: ignore
+        sess = cc_requests.Session(impersonate="chrome131")
+    else:
+        from botasaurus_requests import Session  # type: ignore
+        sess = Session(browser="chrome", os="lin")
+    _thread_local.session = sess
+    _thread_local.kind = kind
+    return sess
 
 
 def _fetch_request(url: str, referer: Optional[str] = None) -> Tuple[str, int]:
