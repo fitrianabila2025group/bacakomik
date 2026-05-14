@@ -51,14 +51,16 @@ class ImportController extends AdminController
             'status'     => 'pending',
         ]);
 
-        // Site-wide crawl is too long for a web request -> spawn detached CLI worker.
-        if ($type === 'site') {
-            $this->spawnSiteCrawler($jobId);
+        // Site & bulk = potentially long -> driven by web-tick worker (frontend polls /tick/{id}).
+        // Best-effort: also try to spawn a detached CLI worker in case the host allows it.
+        if ($type === 'site' || $type === 'bulk') {
+            if ($type === 'site') {
+                $this->spawnSiteCrawler($jobId); // best-effort, harmless if exec disabled
+            }
             return $this->json(['ok' => true, 'job_id' => $jobId, 'background' => true]);
         }
 
-        // For simplicity we run synchronously but with output buffer flushed.
-        // In production you would push this to a worker process.
+        // For comic/chapter we still process synchronously (usually < 2 min).
         ignore_user_abort(true);
         @set_time_limit(0);
 
@@ -70,6 +72,180 @@ class ImportController extends AdminController
     {
         $job = Database::fetch('SELECT * FROM import_jobs WHERE id = ?', [$id]);
         return $this->json(['job' => $job]);
+    }
+
+    /**
+     * Web-tick worker. Dipanggil berulang dari frontend (atau cron URL) untuk
+     * memajukan job tipe `site` / `bulk` selangkah demi selangkah. Tidak
+     * butuh exec()/CLI — aman di shared hosting (cPanel + LiteSpeed).
+     *
+     * Tick pertama untuk job pending = discovery URL list.
+     * Tick berikutnya = import 1 komik dari list, naikkan progress.
+     * Selesai saat progress >= total.
+     */
+    public function tick(int $id): string
+    {
+        Csrf::check();
+        $job = Database::fetch('SELECT * FROM import_jobs WHERE id = ?', [$id]);
+        if (!$job) return $this->json(['ok' => false, 'error' => 'Job tidak ada'], 404);
+        if (in_array($job['status'], ['done','failed','cancelled'], true)) {
+            return $this->json(['ok' => true, 'status' => $job['status'], 'job' => $job]);
+        }
+        if (!in_array($job['type'], ['site','bulk'], true)) {
+            return $this->json(['ok' => true, 'status' => $job['status'], 'job' => $job, 'note' => 'tick tidak diperlukan untuk tipe ini']);
+        }
+
+        // Lock supaya tick paralel (atau CLI worker) tidak overlap.
+        $lockFile = STORAGE_PATH . '/cache/job-' . $id . '.lock';
+        @mkdir(dirname($lockFile), 0775, true);
+        $fp = @fopen($lockFile, 'c');
+        if (!$fp || !flock($fp, LOCK_EX | LOCK_NB)) {
+            $job = Database::fetch('SELECT * FROM import_jobs WHERE id = ?', [$id]);
+            return $this->json(['ok' => true, 'busy' => true, 'job' => $job]);
+        }
+
+        @set_time_limit(180);
+        ignore_user_abort(true);
+
+        try {
+            if ($job['type'] === 'site') {
+                $this->tickSite($job);
+            } else { // bulk
+                $this->tickBulk($job);
+            }
+        } catch (\Throwable $e) {
+            Database::update('import_jobs', [
+                'status' => 'failed', 'message' => 'tick: ' . $e->getMessage(),
+            ], 'id = :id', ['id' => $id]);
+        } finally {
+            flock($fp, LOCK_UN);
+            fclose($fp);
+        }
+
+        $job = Database::fetch('SELECT * FROM import_jobs WHERE id = ?', [$id]);
+        return $this->json(['ok' => true, 'job' => $job]);
+    }
+
+    private function tickSite(array $job): void
+    {
+        $id = (int)$job['id'];
+        $urlsFile = STORAGE_PATH . '/cache/job-' . $id . '.urls.json';
+
+        // Phase 1: discovery (sekali saja per job).
+        if ($job['status'] === 'pending' || !is_file($urlsFile)) {
+            Database::update('import_jobs', ['status' => 'running', 'message' => 'Discovery...'], 'id = :id', ['id' => $id]);
+
+            $raw = trim((string)$job['target_url']);
+            $seeds = null; $maxPages = 500; $maxComics = 0;
+            if ($raw !== '' && $raw[0] === '{') {
+                $cfg = json_decode($raw, true) ?: [];
+                $seeds    = !empty($cfg['seeds']) ? (array)$cfg['seeds'] : null;
+                $maxPages = (int)($cfg['max_pages']  ?? 500);
+                $maxComics= (int)($cfg['max_comics'] ?? 0);
+            } elseif ($raw !== '') {
+                $seeds = array_values(array_filter(array_map('trim', preg_split('/\r?\n/', $raw))));
+            }
+
+            $scraper = new KomikuScraper();
+            $urls = [];
+            if (!$seeds) {
+                try { $urls = $scraper->crawlSitemap(); } catch (\Throwable $_) {}
+            }
+            if (count($urls) < 5) {
+                try {
+                    $extra = $scraper->crawlListing($seeds, $maxPages, $maxComics);
+                    $urls = array_values(array_unique(array_merge($urls, $extra)));
+                } catch (\Throwable $e) {
+                    if (!$urls) throw $e;
+                }
+            }
+            if ($maxComics > 0 && count($urls) > $maxComics) {
+                $urls = array_slice($urls, 0, $maxComics);
+            }
+            file_put_contents($urlsFile, json_encode($urls));
+            Database::update('import_jobs', [
+                'status'   => 'running',
+                'progress' => 0,
+                'total'    => count($urls),
+                'message'  => 'Discovery selesai. Mulai import ' . count($urls) . ' komik.',
+            ], 'id = :id', ['id' => $id]);
+            return;
+        }
+
+        // Phase 2: import 1 komik per tick.
+        $urls   = json_decode((string)file_get_contents($urlsFile), true) ?: [];
+        $offset = (int)$job['progress'];
+        $total  = count($urls);
+        if ($offset >= $total || $total === 0) {
+            Database::update('import_jobs', ['status' => 'done', 'message' => "Selesai $total komik"], 'id = :id', ['id' => $id]);
+            @unlink($urlsFile);
+            return;
+        }
+
+        $u = $urls[$offset];
+        $msg = ($offset + 1) . "/$total : $u";
+        $scraper = new KomikuScraper();
+        try { $scraper->importFullComic($u); }
+        catch (\Throwable $e) { $msg .= ' (err: ' . substr($e->getMessage(), 0, 80) . ')'; }
+        $offset++;
+
+        $cur = Database::fetch('SELECT status FROM import_jobs WHERE id = ?', [$id]);
+        if ($cur && $cur['status'] === 'cancelled') return;
+
+        $newStatus = $offset >= $total ? 'done' : 'running';
+        $finalMsg  = $offset >= $total ? "Selesai $total komik" : $msg;
+        Database::update('import_jobs', [
+            'status'   => $newStatus,
+            'progress' => $offset,
+            'total'    => $total,
+            'message'  => $finalMsg,
+        ], 'id = :id', ['id' => $id]);
+        if ($newStatus === 'done') @unlink($urlsFile);
+    }
+
+    private function tickBulk(array $job): void
+    {
+        $id = (int)$job['id'];
+        $urlsFile = STORAGE_PATH . '/cache/job-' . $id . '.urls.json';
+
+        if ($job['status'] === 'pending' || !is_file($urlsFile)) {
+            $urls = array_values(array_filter(array_map('trim', preg_split('/\r?\n/', (string)$job['target_url']))));
+            file_put_contents($urlsFile, json_encode($urls));
+            Database::update('import_jobs', [
+                'status' => 'running', 'progress' => 0, 'total' => count($urls),
+                'message' => 'Mulai bulk ' . count($urls) . ' komik.',
+            ], 'id = :id', ['id' => $id]);
+            return;
+        }
+
+        $urls   = json_decode((string)file_get_contents($urlsFile), true) ?: [];
+        $offset = (int)$job['progress'];
+        $total  = count($urls);
+        if ($offset >= $total || $total === 0) {
+            Database::update('import_jobs', ['status' => 'done', 'message' => "Selesai $total komik"], 'id = :id', ['id' => $id]);
+            @unlink($urlsFile);
+            return;
+        }
+
+        $u = $urls[$offset];
+        $msg = ($offset + 1) . "/$total : $u";
+        $scraper = new KomikuScraper();
+        try { $scraper->importFullComic($u); }
+        catch (\Throwable $e) { $msg .= ' (err: ' . substr($e->getMessage(), 0, 80) . ')'; }
+        $offset++;
+
+        $cur = Database::fetch('SELECT status FROM import_jobs WHERE id = ?', [$id]);
+        if ($cur && $cur['status'] === 'cancelled') return;
+
+        $newStatus = $offset >= $total ? 'done' : 'running';
+        $finalMsg  = $offset >= $total ? "Selesai $total komik" : $msg;
+        Database::update('import_jobs', [
+            'status'   => $newStatus,
+            'progress' => $offset,
+            'total'    => $total,
+            'message'  => $finalMsg,
+        ], 'id = :id', ['id' => $id]);
+        if ($newStatus === 'done') @unlink($urlsFile);
     }
 
     public function cancel(int $id): string

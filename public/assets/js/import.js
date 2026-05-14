@@ -74,10 +74,21 @@
     else alert(r.error || 'Gagal');
   });
 
-  // Polling
+  // Polling + web-tick worker (driver untuk job site/bulk yang berjalan
+  // selangkah-demi-selangkah lewat HTTP — bekerja di shared hosting tanpa exec/cron).
   function pollJob(id) {
+    let inFlightTick = false;
     const interval = setInterval(async () => {
-      const res = await fetch('/admin/import/status/' + id).then(r => r.json());
+      // Jaga agar tidak menumpuk request tick (importFullComic bisa lama).
+      if (!inFlightTick) {
+        inFlightTick = true;
+        post('/admin/import/tick/' + id, {})
+          .catch(() => {})
+          .finally(() => { inFlightTick = false; });
+      }
+
+      const res = await fetch('/admin/import/status/' + id).then(r => r.json()).catch(() => null);
+      if (!res) return;
       const job = res.job; if (!job) return;
       let row = document.querySelector(`#jobs-table tr[data-id="${id}"]`);
       if (!row) {
@@ -95,7 +106,7 @@
         row.children[5].textContent = job.updated_at;
       }
       if (['done','failed','cancelled'].includes(job.status)) clearInterval(interval);
-    }, 1500);
+    }, 2000);
   }
 
   // Cancel / retry
@@ -104,5 +115,15 @@
     if (cancelId) { await post('/admin/import/cancel/' + cancelId, {}); pollJob(cancelId); }
     const retryId = e.target.dataset?.retry;
     if (retryId)  { await post('/admin/import/retry-failed/' + retryId, {}); pollJob(retryId); }
+  });
+
+  // Auto-resume: lanjutkan polling+tick untuk job yang masih pending/running
+  // saat halaman dibuka (mis. job lama dari sesi sebelumnya).
+  document.querySelectorAll('#jobs-table tbody tr').forEach(tr => {
+    const id = tr.dataset?.id;
+    const status = tr.querySelector('.status')?.textContent?.trim();
+    if (id && (status === 'pending' || status === 'running')) {
+      pollJob(id);
+    }
   });
 })();
