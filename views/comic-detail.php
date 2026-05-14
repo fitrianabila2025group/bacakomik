@@ -1,6 +1,6 @@
 <?php
 /** @var array $comic @var array $chapters @var array $genres @var bool $isBookmarked */
-$cover = $comic['cover_image'] ?: '/assets/img/placeholder.svg';
+$cover = $comic['cover_image'] ? imgproxy($comic['cover_image']) : '/assets/img/placeholder.svg';
 ?>
 <div class="detail-hero" style="background-image:linear-gradient(180deg, rgba(0,0,0,.4), var(--bg)), url('<?= htmlspecialchars($cover) ?>')">
   <div class="container detail-hero-inner">

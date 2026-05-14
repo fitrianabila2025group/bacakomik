@@ -8,7 +8,7 @@ $heroLayout = $settings['hero_layout'] ?? 'classic';
     <?php if (!empty($featured)): ?>
       <div class="hero-slider">
         <?php foreach (array_slice($featured, 0, 5) as $i => $c): ?>
-          <article class="hero-slide <?= $i === 0 ? 'active' : '' ?>" style="--bg:url('<?= htmlspecialchars($c['cover_image'] ?? '') ?>')">
+          <article class="hero-slide <?= $i === 0 ? 'active' : '' ?>" style="--bg:url('<?= htmlspecialchars(imgproxy($c['cover_image'] ?? '')) ?>')">
             <div class="hero-content">
               <span class="badge"><?= htmlspecialchars($c['type']) ?></span>
               <h1><?= htmlspecialchars($c['title']) ?></h1>
@@ -16,7 +16,7 @@ $heroLayout = $settings['hero_layout'] ?? 'classic';
               <a class="btn-primary" href="/comic/<?= htmlspecialchars($c['slug']) ?>">Mulai Baca</a>
             </div>
             <?php if (!empty($c['cover_image'])): ?>
-              <img class="hero-cover" src="<?= htmlspecialchars($c['cover_image']) ?>" alt="">
+              <img class="hero-cover" src="<?= htmlspecialchars(imgproxy($c['cover_image'])) ?>" alt="">
             <?php endif; ?>
           </article>
         <?php endforeach; ?>
@@ -35,7 +35,7 @@ $heroLayout = $settings['hero_layout'] ?? 'classic';
   <div class="comic-grid card-style-<?= htmlspecialchars($cardStyle) ?>">
     <?php foreach ($latest as $c): ?>
       <a href="/comic/<?= htmlspecialchars($c['slug']) ?>" class="comic-card">
-        <div class="cover" style="background-image:url('<?= htmlspecialchars($c['cover_image'] ?? '/assets/img/placeholder.svg') ?>')"></div>
+        <div class="cover" style="background-image:url('<?= htmlspecialchars(!empty($c['cover_image']) ? imgproxy($c['cover_image']) : '/assets/img/placeholder.svg') ?>')"></div>
         <div class="meta">
           <h3><?= htmlspecialchars($c['title']) ?></h3>
           <span class="type"><?= htmlspecialchars($c['type']) ?> · <?= htmlspecialchars($c['status']) ?></span>
@@ -53,7 +53,7 @@ $heroLayout = $settings['hero_layout'] ?? 'classic';
   <div class="comic-grid card-style-<?= htmlspecialchars($cardStyle) ?>">
     <?php foreach ($popular as $c): ?>
       <a href="/comic/<?= htmlspecialchars($c['slug']) ?>" class="comic-card">
-        <div class="cover" style="background-image:url('<?= htmlspecialchars($c['cover_image'] ?? '/assets/img/placeholder.svg') ?>')"></div>
+        <div class="cover" style="background-image:url('<?= htmlspecialchars(!empty($c['cover_image']) ? imgproxy($c['cover_image']) : '/assets/img/placeholder.svg') ?>')"></div>
         <div class="meta">
           <h3><?= htmlspecialchars($c['title']) ?></h3>
           <span class="type">👁 <?= number_format((int)$c['views']) ?></span>

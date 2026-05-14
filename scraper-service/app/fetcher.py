@@ -223,24 +223,24 @@ def fetch_bytes(url: str, referer: Optional[str] = None) -> Tuple[bytes, str]:
 
     s = get_settings()
     sess = _get_request_session()
+    # Minimal headers — biarkan curl_cffi/chrome131 inject Sec-Fetch-*,
+    # User-Agent, sec-ch-ua, dst sesuai sidik jari Chrome asli.
+    # Override manual sebelumnya bertabrakan dgn impersonation -> 403.
     headers = {
         "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9,id;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Sec-Fetch-Dest": "image",
-        "Sec-Fetch-Mode": "no-cors",
-        "Sec-Fetch-Site": "cross-site",
-        "Cache-Control": "no-cache",
     }
     # Default referer: pakai homepage host gambar -> sering lolos hotlink check.
     if not referer:
         host = urlparse(url).hostname or ""
         if host:
-            # turunkan ke domain root (komiku.org untuk thumbnail.komiku.org)
             parts = host.split(".")
             root = ".".join(parts[-2:]) if len(parts) >= 2 else host
             referer = f"https://{root}/"
     headers["Referer"] = referer
+
+    img_host = urlparse(url).hostname or ""
+    img_host_root = f"https://{img_host}/" if img_host else None
 
     last_err: Optional[Exception] = None
     for attempt in range(1, 4):
@@ -258,20 +258,29 @@ def fetch_bytes(url: str, referer: Optional[str] = None) -> Tuple[bytes, str]:
                 except OSError:
                     pass
                 return body, ctype
-            # Hotlink / CF block -> warm-up via referer page lalu retry.
+            # Hotlink / CF block -> warm-up: hit BOTH referer page (set cookie
+            # untuk komiku.org) DAN root host gambar (set cookie utk
+            # thumbnail.komiku.org / img.komiku.org). Kemudian retry.
             if resp.status_code in (401, 403, 429) and attempt < 3:
-                try:
-                    sess.get(
-                        referer,
-                        headers={
-                            "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
-                            "Accept-Language": headers["Accept-Language"],
-                        },
-                        timeout=s.timeout,
-                    )
-                except Exception:  # noqa: BLE001
-                    pass
-                time.sleep(0.4 * attempt)
+                warm_targets = []
+                if attempt == 1 and img_host_root:
+                    warm_targets.append(img_host_root)
+                warm_targets.append(referer)
+                for w in warm_targets:
+                    try:
+                        sess.get(
+                            w,
+                            headers={
+                                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                                "Accept-Language": headers["Accept-Language"],
+                            },
+                            timeout=s.timeout,
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass
+                log.info("fetch_bytes attempt %s got HTTP %s for %s — warmed up, retrying",
+                         attempt, resp.status_code, url)
+                time.sleep(0.5 * attempt)
                 continue
             last_err = RuntimeError(f"HTTP {resp.status_code} fetching {url}")
         except Exception as e:  # noqa: BLE001

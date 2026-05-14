@@ -23,7 +23,7 @@
 <main class="reader-stage">
   <?php $mid = (int)floor(count($images) / 2); ?>
   <?php foreach ($images as $i => $img): ?>
-    <img loading="lazy" src="<?= htmlspecialchars($img['image_path']) ?>" alt="page <?= $i+1 ?>" class="reader-page">
+    <img loading="lazy" src="<?= htmlspecialchars(imgproxy($img['image_path'])) ?>" alt="page <?= $i+1 ?>" class="reader-page">
     <?php if ($i === $mid) ad('reader_middle'); ?>
   <?php endforeach; ?>
 </main>

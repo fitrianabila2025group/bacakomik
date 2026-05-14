@@ -6,7 +6,7 @@
     <?php if (empty($bookmarks)): ?><p class="empty">Belum ada bookmark.</p><?php endif; ?>
     <?php foreach ($bookmarks as $c): ?>
       <a href="/comic/<?= htmlspecialchars($c['slug']) ?>" class="comic-card">
-        <div class="cover" style="background-image:url('<?= htmlspecialchars($c['cover_image'] ?? '/assets/img/placeholder.svg') ?>')"></div>
+        <div class="cover" style="background-image:url('<?= htmlspecialchars(!empty($c['cover_image']) ? imgproxy($c['cover_image']) : '/assets/img/placeholder.svg') ?>')"></div>
         <div class="meta"><h3><?= htmlspecialchars($c['title']) ?></h3></div>
       </a>
     <?php endforeach; ?>
