@@ -107,18 +107,14 @@
   </p>
 
   <h3>Komentar (service di Railway)</h3>
-  <p class="muted">Backend komentar berjalan di Railway (FastAPI), shared host hanya menampilkan widget JS. Set URL service & HMAC secret di bawah, lalu set ENV yang sama di Railway.</p>
+  <p class="muted">Backend komentar berjalan di Railway (FastAPI). Browser memanggil <code>/api/comments/*</code> di host ini, lalu PHP meneruskan ke Railway dengan API Key yang sama dipakai service Scraper di atas. Pastikan <em>Scraper API URL &amp; API Key</em> di atas sudah benar.</p>
   <div class="row">
     <label class="check"><input type="checkbox" name="comments_enabled" value="1" <?= ($settings['comments_enabled'] ?? '0')==='1'?'checked':'' ?>> Aktifkan komentar</label>
     <label class="check"><input type="checkbox" name="comments_on_comic" value="1" <?= ($settings['comments_on_comic'] ?? '1')==='1'?'checked':'' ?>> Tampilkan di halaman komik</label>
     <label class="check"><input type="checkbox" name="comments_on_chapter" value="1" <?= ($settings['comments_on_chapter'] ?? '1')==='1'?'checked':'' ?>> Tampilkan di halaman chapter</label>
-    <label class="check"><input type="checkbox" name="comments_guest_allowed" value="1" <?= ($settings['comments_guest_allowed'] ?? '0')==='1'?'checked':'' ?>> Izinkan guest (tanpa login)</label>
   </div>
-  <label>Comments API URL (Railway)
+  <label>Comments API URL <span class="muted">(opsional — kosongkan untuk pakai Scraper API URL di atas)</span>
     <input type="url" name="comments_api_url" placeholder="https://xxxx.up.railway.app" value="<?= htmlspecialchars($settings['comments_api_url'] ?? '') ?>">
-  </label>
-  <label>HMAC Secret (rahasia, harus sama dengan ENV <code>COMMENTS_HMAC_SECRET</code> di Railway)
-    <input type="text" name="comments_hmac_secret" autocomplete="off" value="<?= htmlspecialchars($settings['comments_hmac_secret'] ?? '') ?>">
   </label>
   <div class="row">
     <button class="btn-ghost" type="button" id="btn-test-comments-api">Test Connection</button>

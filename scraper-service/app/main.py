@@ -33,7 +33,7 @@ from .fetcher import fetch_bytes
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("api")
 
-app = FastAPI(title="BacaKomik Scraper API", version="1.5.0")
+app = FastAPI(title="BacaKomik Scraper API", version="1.5.1")
 
 _settings = get_settings()
 app.add_middleware(

@@ -127,6 +127,13 @@ $router->get('/admin/license',                  'Admin\SettingController@license
 // Storage proxy (serve files outside public)
 $router->get('/storage/{path:.*}',              'HomeController@serveStorage');
 
+// Comments proxy (browser -> PHP -> Railway /comments)
+$router->get('/api/comments',                   'CommentsController@index');
+$router->post('/api/comments',                  'CommentsController@store');
+$router->post('/api/comments/{id}/react',       'CommentsController@react');
+$router->post('/api/comments/{id}/delete',      'CommentsController@delete');
+$router->post('/api/comments/{id}/pin',         'CommentsController@pin');
+
 // SEO
 $router->get('/sitemap.xml',                    'HomeController@sitemap');
 $router->get('/sitemap-pages.xml',              'HomeController@sitemapPages');

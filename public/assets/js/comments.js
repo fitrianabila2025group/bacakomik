@@ -1,10 +1,11 @@
-/* BacaKomik comments widget — vanilla JS, talks to Railway FastAPI /comments. */
+/* BacaKomik comments widget — talks to PHP same-origin /api/comments/* which
+   forwards to Railway with X-API-Key. No cross-domain tokens, no CORS. */
 (function () {
   const root = document.getElementById('bk-comments');
   if (!root) return;
   let cfg;
   try { cfg = JSON.parse(root.dataset.cfg); } catch (e) { return; }
-  if (!cfg.api || !cfg.target) return;
+  if (!cfg.target) return;
 
   const REACTIONS = [
     { k: 'like',    e: '👍' },
@@ -17,23 +18,26 @@
     { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]
   ));
   const fmtDate = (ts) => {
-    const d = new Date(ts * 1000), now = Date.now() / 1000, diff = now - ts;
+    const now = Date.now() / 1000, diff = now - ts;
     if (diff < 60) return 'baru saja';
     if (diff < 3600) return Math.floor(diff / 60) + ' menit lalu';
     if (diff < 86400) return Math.floor(diff / 3600) + ' jam lalu';
     if (diff < 604800) return Math.floor(diff / 86400) + ' hari lalu';
-    return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    return new Date(ts * 1000).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
-  const api = (path, opts = {}) => {
-    const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
-    if (cfg.token) headers['X-User-Token'] = cfg.token;
-    return fetch(cfg.api + '/comments' + path, Object.assign({}, opts, { headers }))
-      .then(async (r) => {
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(j.detail || ('HTTP ' + r.status));
-        return j;
-      });
+  const api = (method, path, body) => {
+    const opts = { method, headers: { 'Accept': 'application/json' }, credentials: 'same-origin' };
+    if (body !== undefined) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.headers['X-CSRF-TOKEN'] = cfg.csrf || '';
+      opts.body = JSON.stringify(body);
+    }
+    return fetch('/api/comments' + path, opts).then(async (r) => {
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.detail || ('HTTP ' + r.status));
+      return j;
+    });
   };
 
   let state = { sort: 'top', page: 1, total: 0, comments: [] };
@@ -73,7 +77,7 @@
         <div class="comment-body">${esc(c.text).replace(/\n/g, '<br>')}</div>
         <div class="comment-actions">
           ${reactBtns}
-          ${cfg.token && !c.parent_id ? `<button class="reply-btn" data-id="${c.id}">Balas</button>` : ''}
+          ${cfg.me && !c.parent_id ? `<button class="reply-btn" data-id="${c.id}">Balas</button>` : ''}
           ${canDel ? `<button class="del-btn" data-id="${c.id}">Hapus</button>` : ''}
         </div>
         <div class="reply-form-wrap"></div>
@@ -84,7 +88,7 @@
 
   function renderForm(host, parentId, placeholder) {
     if (!host) return;
-    if (!cfg.token) {
+    if (!cfg.me) {
       host.innerHTML = `<p class="comments-login"><a href="${cfg.login_url}">Masuk</a> untuk berkomentar.</p>`;
       return;
     }
@@ -101,13 +105,14 @@
       e.preventDefault();
       const text = f.text.value.trim();
       if (!text) return;
-      f.querySelector('button[type=submit]').disabled = true;
+      const btn = f.querySelector('button[type=submit]');
+      btn.disabled = true;
       try {
-        await api('', { method: 'POST', body: JSON.stringify({ target: cfg.target, parent_id: parentId, text }) });
+        await api('POST', '', { target: cfg.target, parent_id: parentId, text });
         await load(state.page);
       } catch (err) {
         alert('Gagal: ' + err.message);
-        f.querySelector('button[type=submit]').disabled = false;
+        btn.disabled = false;
       }
     });
     const cancel = f.querySelector('.cancel-reply');
@@ -119,9 +124,9 @@
       state.sort = b.dataset.sort; load(1);
     }));
     root.querySelectorAll('.react-btn').forEach(b => b.addEventListener('click', async () => {
-      if (!cfg.token) { location.href = cfg.login_url; return; }
+      if (!cfg.me) { location.href = cfg.login_url; return; }
       try {
-        await api('/' + b.dataset.id + '/react', { method: 'POST', body: JSON.stringify({ type: b.dataset.type }) });
+        await api('POST', '/' + b.dataset.id + '/react', { type: b.dataset.type });
         await load(state.page);
       } catch (err) { alert(err.message); }
     }));
@@ -135,7 +140,7 @@
     root.querySelectorAll('.del-btn').forEach(b => b.addEventListener('click', async () => {
       if (!confirm('Hapus komentar ini?')) return;
       try {
-        await api('/' + b.dataset.id, { method: 'DELETE' });
+        await api('POST', '/' + b.dataset.id + '/delete', {});
         await load(state.page);
       } catch (err) { alert(err.message); }
     }));
@@ -143,7 +148,7 @@
 
   function load(page = 1) {
     state.page = page;
-    return api('?target=' + encodeURIComponent(cfg.target) + '&sort=' + state.sort + '&page=' + page)
+    return api('GET', '?target=' + encodeURIComponent(cfg.target) + '&sort=' + state.sort + '&page=' + page)
       .then(j => { state.total = j.total; state.comments = j.comments; render(); })
       .catch(err => { root.innerHTML = '<p class="comments-error">Gagal memuat komentar: ' + esc(err.message) + '</p>'; });
   }

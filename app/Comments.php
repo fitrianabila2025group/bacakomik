@@ -1,6 +1,8 @@
 <?php
 namespace App;
 
+use App\Auth;
+use App\Csrf;
 use App\Models\Setting;
 
 /**
@@ -17,9 +19,11 @@ class Comments
 {
     public static function enabled(): bool
     {
-        return Setting::get('comments_enabled', '0') === '1'
-            && trim((string)Setting::get('comments_api_url', '')) !== ''
-            && trim((string)Setting::get('comments_hmac_secret', '')) !== '';
+        if (Setting::get('comments_enabled', '0') !== '1') return false;
+        // Need either dedicated comments_api_url OR scraper_api_url to fall back to.
+        $api = trim((string)Setting::get('comments_api_url', '')) ?: trim((string)Setting::get('scraper_api_url', ''));
+        $key = trim((string)Setting::get('scraper_api_key', ''));
+        return $api !== '' && $key !== '';
     }
 
     public static function enabledFor(string $context): bool
@@ -28,35 +32,9 @@ class Comments
         return self::enabled() && Setting::get('comments_on_' . $context, '1') === '1';
     }
 
-    public static function apiUrl(): string
-    {
-        return rtrim((string)Setting::get('comments_api_url', ''), '/');
-    }
-
     /**
-     * Sign a JSON payload using HMAC-SHA256 with the shared secret.
-     * Returns "<base64url(json)>.<hex_sig>" or '' if no secret/user.
-     */
-    public static function userToken(?array $user = null, int $ttl = 3600): string
-    {
-        $u = $user ?? Auth::user();
-        if (!$u) return '';
-        $secret = (string)Setting::get('comments_hmac_secret', '');
-        if ($secret === '') return '';
-        $payload = [
-            'uid'  => (int)$u['id'],
-            'name' => (string)$u['name'],
-            'role' => (($u['role'] ?? 'user') === 'admin') ? 'admin' : 'user',
-            'exp'  => time() + max(60, $ttl),
-        ];
-        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $b64  = rtrim(strtr(base64_encode($json), '+/', '-_'), '=');
-        $sig  = hash_hmac('sha256', $b64, $secret);
-        return $b64 . '.' . $sig;
-    }
-
-    /**
-     * Render the comments widget mount + bootstrap. Echoes nothing if disabled.
+     * Render the comments widget. Browser talks to /api/comments/* on this
+     * shared host; PHP forwards to Railway with the scraper API key.
      *
      * @param string $context  'comic' | 'chapter'
      * @param string $target   "comic:slug" or "chapter:123"
@@ -64,17 +42,15 @@ class Comments
     public static function render(string $context, string $target): string
     {
         if (!self::enabledFor($context)) return '';
-        $user  = Auth::user();
+        $user = Auth::user();
         $cfg = [
-            'api'         => self::apiUrl(),
-            'target'      => $target,
-            'token'       => self::userToken($user),
-            'me'          => $user ? ['id'=>(int)$user['id'],'name'=>$user['name'],'role'=>$user['role']] : null,
-            'login_url'   => '/login',
-            'guest_ok'    => Setting::get('comments_guest_allowed', '0') === '1',
+            'target'    => $target,
+            'csrf'      => Csrf::token(),
+            'me'        => $user ? ['id'=>(int)$user['id'],'name'=>$user['name'],'role'=>$user['role']] : null,
+            'login_url' => '/login',
         ];
         $json = htmlspecialchars(json_encode($cfg, JSON_UNESCAPED_SLASHES), ENT_QUOTES);
         return '<section id="bk-comments" class="comments-section" data-cfg="' . $json . '"></section>'
-            . '<script src="/assets/js/comments.js" defer></script>';
+            . '<script src="/assets/js/comments.js?v=' . (@filemtime(BASE_PATH . '/public/assets/js/comments.js') ?: time()) . '" defer></script>';
     }
 }
