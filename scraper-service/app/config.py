@@ -94,6 +94,12 @@ class Settings:
     host: str = os.getenv("HOST", "0.0.0.0")
     port: int = int(os.getenv("PORT", "8080"))
     cors_origins: List[str] = _split_csv(os.getenv("CORS_ORIGINS", "*")) or ["*"]
+    # Bila True, /proxy boleh diakses tanpa X-API-Key. Aman karena domain
+    # sudah dibatasi via SCRAPER_WHITELIST. Default True supaya URL gambar
+    # yang disimpan ke DB shared-hosting tidak membocorkan API key ke publik.
+    proxy_public: bool = os.getenv("SCRAPER_PROXY_PUBLIC", "1").strip() not in ("0", "false", "False", "no", "")
+    # Cache HTTP gambar di sisi browser (detik). Default 7 hari.
+    proxy_cache_age: int = int(os.getenv("SCRAPER_PROXY_CACHE_AGE", "604800"))
 
 
 @lru_cache

@@ -32,7 +32,7 @@ from .fetcher import fetch_bytes
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("api")
 
-app = FastAPI(title="BacaKomik Scraper API", version="1.0.0")
+app = FastAPI(title="BacaKomik Scraper API", version="1.2.0")
 
 _settings = get_settings()
 app.add_middleware(
@@ -68,6 +68,7 @@ def health():
         "ok": True,
         "mode": s.mode,
         "whitelist": s.whitelist,
+        "proxy_public": s.proxy_public,
         # Flag supaya admin tahu key masih bawaan auto-generate (cek di deploy log).
         "api_key_source": "env" if os.getenv("SCRAPER_API_KEY", "").strip() else "auto-generated",
     }
@@ -137,18 +138,28 @@ def scrape_images(body: UrlBody):
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 
-@app.get("/proxy", dependencies=[Depends(require_key)])
-def proxy(url: str = Query(...), referer: Optional[str] = Query(None)):
+@app.get("/proxy")
+def proxy(request: Request, url: str = Query(...), referer: Optional[str] = Query(None)):
     """
     Stream an image (or any whitelisted asset) through the scraper.
-    Used by the PHP backend to download images that may also sit behind CF
-    or hotlink protection — request goes through the same TLS fingerprint
-    and IP as the HTML scrape.
+
+    Bila ``SCRAPER_PROXY_PUBLIC=1`` (default), endpoint ini terbuka tanpa
+    API key supaya URL gambar yang disimpan di database shared-hosting bisa
+    di-render langsung oleh browser pengunjung tanpa membocorkan key.
+    Pengaman: hanya domain di ``SCRAPER_WHITELIST`` yang dilayani.
     """
+    s = get_settings()
+    if not s.proxy_public:
+        require_key(request)
     try:
         body, ctype = fetch_bytes(url, referer)
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=str(e)) from e
-    return Response(content=body, media_type=ctype)
+    headers = {
+        "Cache-Control": f"public, max-age={s.proxy_cache_age}, immutable",
+        "Access-Control-Allow-Origin": "*",
+        "X-Content-Type-Options": "nosniff",
+    }
+    return Response(content=body, media_type=ctype, headers=headers)

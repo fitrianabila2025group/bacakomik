@@ -52,11 +52,16 @@ class ApiClient
      * Build a /proxy URL that the PHP image downloader can hit directly
      * (with the X-API-Key header) to fetch a cover/chapter image through
      * the same Cloudflare-bypassing tunnel.
+     *
+     * Bila $publicSafe=true, URL TIDAK menyertakan API key — cocok untuk
+     * disimpan ke kolom DB (cover_image / image_path) lalu di-render di
+     * <img src="..."> publik. Service harus jalan dgn SCRAPER_PROXY_PUBLIC=1.
      */
-    public function proxyUrl(string $imageUrl, ?string $referer = null): string
+    public function proxyUrl(string $imageUrl, ?string $referer = null, bool $publicSafe = false): string
     {
         $q = ['url' => $imageUrl];
         if ($referer) $q['referer'] = $referer;
+        if (!$publicSafe) $q['key'] = $this->apiKey;
         return $this->baseUrl . '/proxy?' . http_build_query($q);
     }
 

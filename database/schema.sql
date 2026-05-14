@@ -24,7 +24,7 @@ CREATE TABLE comics (
     type ENUM('Manga','Manhwa','Manhua','Other') DEFAULT 'Manga',
     status ENUM('Ongoing','Completed','Hiatus') DEFAULT 'Ongoing',
     synopsis TEXT,
-    cover_image VARCHAR(255) DEFAULT NULL,
+    cover_image VARCHAR(500) DEFAULT NULL,
     source_url VARCHAR(500) DEFAULT NULL,
     rating DECIMAL(3,1) DEFAULT 0,
     views INT UNSIGNED DEFAULT 0,

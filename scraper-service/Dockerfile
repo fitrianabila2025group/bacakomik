@@ -35,6 +35,8 @@ ENV HOST=0.0.0.0 \
     SCRAPER_WHITELIST="komiku.org,komiku.id,img.komiku.org,mangaku.top,img.mangaku.top,cover.mangaku.top" \
     SCRAPER_TIMEOUT=45 \
     SCRAPER_CACHE_TTL=3600 \
+    SCRAPER_PROXY_PUBLIC=1 \
+    SCRAPER_PROXY_CACHE_AGE=604800 \
     CORS_ORIGINS="*"
 
 EXPOSE 8080

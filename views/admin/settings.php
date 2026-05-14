@@ -51,6 +51,21 @@
   <label>API Key (X-API-Key)
     <input type="text" name="scraper_api_key" autocomplete="off" value="<?= htmlspecialchars($settings['scraper_api_key'] ?? '') ?>">
   </label>
+
+  <div class="grid-2">
+    <label class="check" title="Hemat berat shared hosting: gambar TIDAK di-download, hanya simpan URL proxy Railway ke DB. Browser pengunjung load gambar langsung dari Railway.">
+      <input type="checkbox" name="scraper_remote_storage" value="1" <?= ($settings['scraper_remote_storage'] ?? '1') === '1' ? 'checked' : '' ?>>
+      <strong>Remote storage (thin mode)</strong> — bandwidth + storage di Railway, hosting cuma simpan URL
+    </label>
+    <label class="check" title="Endpoint /proxy boleh diakses publik tanpa key. Wajib ON kalau Remote storage ON, supaya URL gambar di DB tidak membocorkan API key.">
+      <input type="checkbox" name="scraper_proxy_public" value="1" <?= ($settings['scraper_proxy_public'] ?? '1') === '1' ? 'checked' : '' ?>>
+      <strong>Proxy public</strong> — URL gambar publik (butuh SCRAPER_PROXY_PUBLIC=1 di service)
+    </label>
+  </div>
+  <p class="muted" style="font-size:.85em">
+    💡 Mode <strong>Remote storage</strong> sangat disarankan untuk shared hosting. Tanpa ini, setiap import 1 komik = ratusan curl download yang membuat website blank/timeout.
+  </p>
+
   <div class="row">
     <button class="btn-ghost" type="button" id="btn-test-scraper-api">Test Connection</button>
     <span id="scraper-api-status" class="muted"></span>
