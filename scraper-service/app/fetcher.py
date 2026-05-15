@@ -230,22 +230,36 @@ def fetch_bytes(url: str, referer: Optional[str] = None) -> Tuple[bytes, str]:
         "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9,id;q=0.8",
     }
-    # Default referer: pakai homepage host gambar -> sering lolos hotlink check.
-    if not referer:
-        host = urlparse(url).hostname or ""
-        if host:
-            parts = host.split(".")
-            root = ".".join(parts[-2:]) if len(parts) >= 2 else host
-            referer = f"https://{root}/"
-    headers["Referer"] = referer
-
     img_host = urlparse(url).hostname or ""
     img_host_root = f"https://{img_host}/" if img_host else None
 
+    # Bangun daftar kandidat Referer. Komiku sering menolak referer chapter URL
+    # tertentu (pattern blacklist) tapi terima referer homepage. Cycle melalui
+    # beberapa kandidat supaya hotlink check yg ketat tetap lolos.
+    ref_candidates: list[Optional[str]] = []
+    if referer:
+        ref_candidates.append(referer)
+    # Homepage komiku.id + komiku.org (urutan ini cocok utk img.komiku.org).
+    for root in ("https://komiku.id/", "https://komiku.org/"):
+        if root not in ref_candidates:
+            ref_candidates.append(root)
+    # Root host gambar.
+    if img_host_root and img_host_root not in ref_candidates:
+        ref_candidates.append(img_host_root)
+    # Terakhir: tanpa Referer sama sekali (bbrp CDN justru izinkan no-referer).
+    ref_candidates.append(None)
+
     last_err: Optional[Exception] = None
-    for attempt in range(1, 4):
+    max_attempts = max(3, len(ref_candidates))
+    for attempt in range(1, max_attempts + 1):
+        cur_ref = ref_candidates[(attempt - 1) % len(ref_candidates)]
+        cur_headers = dict(headers)
+        if cur_ref:
+            cur_headers["Referer"] = cur_ref
+        else:
+            cur_headers.pop("Referer", None)
         try:
-            resp = sess.get(url, headers=headers, timeout=s.timeout)
+            resp = sess.get(url, headers=cur_headers, timeout=s.timeout)
             if 200 <= resp.status_code < 300 and resp.content:
                 body = resp.content
                 ctype = resp.headers.get("Content-Type", "application/octet-stream")
@@ -258,14 +272,15 @@ def fetch_bytes(url: str, referer: Optional[str] = None) -> Tuple[bytes, str]:
                 except OSError:
                     pass
                 return body, ctype
-            # Hotlink / CF block -> warm-up: hit BOTH referer page (set cookie
-            # untuk komiku.org) DAN root host gambar (set cookie utk
-            # thumbnail.komiku.org / img.komiku.org). Kemudian retry.
-            if resp.status_code in (401, 403, 429) and attempt < 3:
+            # Hotlink / CF block -> warm-up: hit referer page DAN root host
+            # gambar utk set cookie CF, lalu retry dgn kandidat referer
+            # berikutnya pada loop berikut.
+            if resp.status_code in (401, 403, 429) and attempt < max_attempts:
                 warm_targets = []
                 if attempt == 1 and img_host_root:
                     warm_targets.append(img_host_root)
-                warm_targets.append(referer)
+                if cur_ref:
+                    warm_targets.append(cur_ref)
                 for w in warm_targets:
                     try:
                         sess.get(
@@ -278,13 +293,13 @@ def fetch_bytes(url: str, referer: Optional[str] = None) -> Tuple[bytes, str]:
                         )
                     except Exception:  # noqa: BLE001
                         pass
-                log.info("fetch_bytes attempt %s got HTTP %s for %s — warmed up, retrying",
-                         attempt, resp.status_code, url)
-                time.sleep(0.5 * attempt)
+                log.info("fetch_bytes attempt %s got HTTP %s for %s (ref=%s) — warmed up, retrying",
+                         attempt, resp.status_code, url, cur_ref)
+                time.sleep(0.4 * attempt)
                 continue
             last_err = RuntimeError(f"HTTP {resp.status_code} fetching {url}")
         except Exception as e:  # noqa: BLE001
             last_err = e
             log.warning("fetch_bytes attempt %s for %s failed: %s", attempt, url, e)
-        time.sleep(0.4 * attempt)
+        time.sleep(0.3 * attempt)
     raise last_err or RuntimeError(f"Gagal fetch {url}")
