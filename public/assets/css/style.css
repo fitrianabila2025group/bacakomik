@@ -412,3 +412,35 @@ img { max-width: 100%; display: block; }
 [data-theme="dark"] .comments-sort { background: rgba(255,255,255,.06); }
 [data-theme="dark"] .comments-sort button.active { background: var(--bg); }
 [data-theme="dark"] .comment.pinned { background: rgba(255, 215, 0, .08); }
+
+/* --- Comments + reader nav helpers (audit patch) --- */
+.reader-nav-inner .disabled {
+  opacity: .45;
+  pointer-events: none;
+}
+.reader-comments {
+  max-width: 900px;
+  margin: 2rem auto;
+  padding: 0 1rem 3rem;
+}
+.comment-form textarea {
+  display: block;
+  width: 100%;
+}
+.comment-form .row {
+  display: flex;
+  justify-content: flex-end;
+  gap: .5rem;
+  margin-top: .5rem;
+}
+.comments-section,
+#bk-comments {
+  background: var(--bg);
+  color: var(--text);
+}
+.comments-pager {
+  display: flex;
+  justify-content: center;
+  gap: .5rem;
+  margin-top: 1rem;
+}

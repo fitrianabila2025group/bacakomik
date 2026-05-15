@@ -5,14 +5,24 @@
 declare(strict_types=1);
 
 // --- Session hardening (must run before session_start) ---
-$secureCookie = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+$appUrlEnv = getenv('APP_URL') ?: '';
+$secureCookie =
+    (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+    || str_starts_with($appUrlEnv, 'https://');
 ini_set('session.use_strict_mode', '1');
 ini_set('session.use_only_cookies', '1');
 ini_set('session.cookie_httponly', '1');
 ini_set('session.cookie_samesite', 'Lax');
 if ($secureCookie) ini_set('session.cookie_secure', '1');
 session_start();
+
+// Halaman dinamis (mengandung session/CSRF) tidak boleh di-cache CDN.
+// Bypass: aset statis under /assets/, /storage/, dan /img.php sudah di-serve
+// langsung oleh Apache/CDN — request ke front-controller PHP berarti dinamis.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
 
 define('BASE_PATH', dirname(__DIR__));
 define('APP_PATH', BASE_PATH . '/app');

@@ -2,6 +2,7 @@
 namespace App\Controllers;
 
 use App\Auth;
+use App\Captcha;
 use App\Csrf;
 use App\Models\Setting;
 
@@ -58,6 +59,9 @@ class CommentsController extends Controller
     {
         Csrf::check();
         if (!Auth::check()) { return $this->json(['ok' => false, 'detail' => 'login required'], 401); }
+        if (!Captcha::verify('comment')) {
+            return $this->json(['ok' => false, 'detail' => 'Verifikasi CAPTCHA gagal.'], 400);
+        }
         [$base, $key] = $this->api();
         $body = $this->jsonBody();
         $payload = array_merge($this->actor(), [

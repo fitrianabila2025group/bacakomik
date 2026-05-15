@@ -34,8 +34,14 @@
       opts.body = JSON.stringify(body);
     }
     return fetch('/api/comments' + path, opts).then(async (r) => {
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.detail || ('HTTP ' + r.status));
+      const text = await r.text();
+      let j = {};
+      try {
+        j = text ? JSON.parse(text) : {};
+      } catch (e) {
+        throw new Error('Invalid API response: ' + text.slice(0, 160));
+      }
+      if (!r.ok) throw new Error(j.detail || j.error || ('HTTP ' + r.status));
       return j;
     });
   };
@@ -149,8 +155,21 @@
   function load(page = 1) {
     state.page = page;
     return api('GET', '?target=' + encodeURIComponent(cfg.target) + '&sort=' + state.sort + '&page=' + page)
-      .then(j => { state.total = j.total; state.comments = j.comments; render(); })
+      .then(j => { state.total = j.total; state.comments = j.comments || []; render(); renderPager(); })
       .catch(err => { root.innerHTML = '<p class="comments-error">Gagal memuat komentar: ' + esc(err.message) + '</p>'; });
+  }
+
+  function renderPager() {
+    const pager = root.querySelector('.comments-pager');
+    if (!pager) return;
+    const hasPrev = state.page > 1;
+    const hasNext = state.comments.length >= 15;
+    pager.innerHTML = `
+      ${hasPrev ? '<button class="btn-ghost comments-prev">← Sebelumnya</button>' : ''}
+      ${hasNext ? '<button class="btn-ghost comments-next">Berikutnya →</button>' : ''}
+    `;
+    pager.querySelector('.comments-prev')?.addEventListener('click', () => load(state.page - 1));
+    pager.querySelector('.comments-next')?.addEventListener('click', () => load(state.page + 1));
   }
 
   load(1);

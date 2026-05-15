@@ -14,6 +14,7 @@ $user = \App\Auth::user();
 <meta name="theme-color" content="#6366F1">
 <title><?= htmlspecialchars($metaTitle) ?></title>
 <meta name="description" content="<?= htmlspecialchars($metaDesc) ?>">
+<meta name="csrf-token" content="<?= htmlspecialchars(\App\Csrf::token()) ?>">
 <meta property="og:title" content="<?= htmlspecialchars($metaTitle) ?>">
 <meta property="og:description" content="<?= htmlspecialchars($metaDesc) ?>">
 <meta property="og:type" content="website">

@@ -237,7 +237,7 @@ class HomeController extends Controller
         $urls = [];
         foreach ($rows as $r) {
             $urls[] = [
-                'loc'        => "$base/comic/" . htmlspecialchars($r['comic_slug']) . '/' . htmlspecialchars($r['chapter_slug']),
+                'loc'        => "$base/comic/" . htmlspecialchars($r['comic_slug']) . '/chapter/' . htmlspecialchars($r['chapter_slug']),
                 'lastmod'    => date('c', strtotime($r['updated_at'])),
                 'priority'   => '0.6',
                 'changefreq' => 'weekly',

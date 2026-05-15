@@ -6,6 +6,21 @@ function toggleTheme() {
   localStorage.setItem('theme', next);
 }
 
+// Shared HTML escaper (XSS-safe interpolation into innerHTML)
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[c]));
+}
+
+function csrfToken() {
+  return document.querySelector('meta[name="csrf-token"]')?.content || '';
+}
+
 // Tabs
 document.addEventListener('click', (e) => {
   const tab = e.target.closest('[data-tabs] .tab');
@@ -24,14 +39,22 @@ document.addEventListener('click', async (e) => {
   if (!btn) return;
   const id = btn.dataset.comic;
   const fd = new FormData();
-  fd.append('_csrf', document.cookie); // best-effort; server will validate token if posted via real form
+  fd.append('_csrf', csrfToken());
   try {
-    const res = await fetch(`/bookmark/${id}`, { method: 'POST', body: fd });
+    const res = await fetch(`/bookmark/${id}`, {
+      method: 'POST',
+      body: fd,
+      headers: { 'X-CSRF-TOKEN': csrfToken(), 'Accept': 'application/json' },
+      credentials: 'same-origin',
+    });
     if (res.status === 401 || res.redirected) { location.href = '/login'; return; }
-    const data = await res.json();
+    const text = await res.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch (_) {}
+    if (!res.ok) throw new Error(data.detail || data.error || ('HTTP ' + res.status));
     btn.dataset.active = data.bookmarked ? '1' : '0';
     btn.textContent = data.bookmarked ? 'Tersimpan' : 'Bookmark';
-  } catch (err) { console.error(err); }
+  } catch (err) { console.error(err); alert('Gagal bookmark: ' + err.message); }
 });
 
 // Realtime search dropdown (simple)
@@ -49,12 +72,17 @@ if (searchInput) {
       dropdown.style.cssText = 'position:absolute;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.5rem;box-shadow:var(--shadow);z-index:60;min-width:280px;margin-top:.5rem;';
       searchInput.closest('.search-form').appendChild(dropdown);
     }
-    dropdown.innerHTML = data.results.map(r =>
-      `<a href="/comic/${r.slug}" style="display:flex;gap:.5rem;padding:.4rem;border-radius:6px;align-items:center;">
-         <img src="${r.cover_image||''}" style="width:32px;height:44px;object-fit:cover;border-radius:4px;background:#eee">
-         <span><strong>${r.title}</strong><br><small style="color:var(--muted)">${r.type} · ${r.status}</small></span>
-       </a>`
-    ).join('') || '<small style="color:var(--muted)">Tidak ada hasil</small>';
+    dropdown.innerHTML = (data.results || []).map(r => {
+      const slug  = encodeURIComponent(r.slug || '');
+      const title = escHtml(r.title);
+      const cover = escHtml(r.cover_image || '');
+      const type  = escHtml(r.type || '');
+      const stat  = escHtml(r.status || '');
+      return `<a href="/comic/${slug}" style="display:flex;gap:.5rem;padding:.4rem;border-radius:6px;align-items:center;">
+         <img src="${cover}" style="width:32px;height:44px;object-fit:cover;border-radius:4px;background:#eee" alt="">
+         <span><strong>${title}</strong><br><small style="color:var(--muted)">${type} · ${stat}</small></span>
+       </a>`;
+    }).join('') || '<small style="color:var(--muted)">Tidak ada hasil</small>';
   });
   document.addEventListener('click', (e) => {
     if (dropdown && !e.target.closest('.search-form')) { dropdown.remove(); dropdown = null; }
