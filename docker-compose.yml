@@ -1,7 +1,8 @@
 services:
   app:
+    image: mpratamamail/bacakomik:latest
+    pull_policy: always
     build: .
-    image: bacakomik:latest
     restart: unless-stopped
     ports:
       - "8080:80"

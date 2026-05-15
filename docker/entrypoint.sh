@@ -16,8 +16,83 @@ if [[ -n "${DB_HOST:-}" ]]; then
 fi
 
 if [[ "${AUTO_INSTALL:-0}" == "1" ]]; then
-  echo "[entrypoint] Running install.php (AUTO_INSTALL=1)..."
-  php /var/www/html/install.php || echo "[entrypoint] install.php returned non-zero (probably already installed)"
+  # Idempotent schema + seed loader. install.php is web-only (POST), so
+  # for unattended docker first-boot we import the SQL ourselves and write
+  # the lock file install.php expects.
+  LOCK=/var/www/html/storage/.installed
+  if [[ ! -f "$LOCK" ]]; then
+    echo "[entrypoint] AUTO_INSTALL=1 — bootstrapping schema + seed..."
+    mkdir -p /var/www/html/storage/comics /var/www/html/storage/covers \
+             /var/www/html/storage/cache  /var/www/html/storage/settings
+    chown -R www-data:www-data /var/www/html/storage
+
+    HAS_TABLES=$(php -r "
+      try {
+        \$db = new PDO('mysql:host='.getenv('DB_HOST').';port='.(getenv('DB_PORT')?:3306).';dbname='.getenv('DB_NAME').';charset=utf8mb4',
+                       getenv('DB_USER'), getenv('DB_PASS'),
+                       [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        \$n = (int)\$db->query(\"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'users'\")->fetchColumn();
+        echo \$n;
+      } catch (Throwable \$e) { echo 0; }
+    ")
+
+    if [[ "$HAS_TABLES" == "0" ]]; then
+      echo "[entrypoint] Importing database/schema.sql + seed.sql ..."
+      ADMIN_EMAIL="${ADMIN_EMAIL:-admin@example.com}" \
+      ADMIN_PASS="${ADMIN_PASS:-admin12345}" \
+      SCRAPER_API_URL="${SCRAPER_API_URL:-http://scraper:8000}" \
+      SCRAPER_API_KEY_ENV="${SCRAPER_API_KEY:-devtest123}" \
+      php -r "
+        \$db = new PDO('mysql:host='.getenv('DB_HOST').';port='.(getenv('DB_PORT')?:3306).';dbname='.getenv('DB_NAME').';charset=utf8mb4',
+                      getenv('DB_USER'), getenv('DB_PASS'),
+                      [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        foreach (['schema','seed'] as \$name) {
+          \$sql = file_get_contents('/var/www/html/database/'.\$name.'.sql');
+          if (\$sql === false || trim(\$sql) === '') continue;
+          \$sql = preg_replace('!/\*.*?\*/!s', '', \$sql);
+          foreach (preg_split('/;\s*\n/', \$sql) as \$stmt) {
+            \$stmt = trim(\$stmt);
+            if (\$stmt === '' || str_starts_with(\$stmt, '--')) continue;
+            \$db->exec(\$stmt);
+          }
+          fwrite(STDERR, '[entrypoint]   loaded '.\$name.'.sql'.PHP_EOL);
+        }
+        // Seed admin user (if not present)
+        \$email = getenv('ADMIN_EMAIL');
+        \$pass  = getenv('ADMIN_PASS');
+        \$hash  = password_hash(\$pass, PASSWORD_BCRYPT);
+        \$st = \$db->prepare('SELECT id FROM users WHERE email = ?');
+        \$st->execute([\$email]);
+        if (\$st->fetchColumn()) {
+          \$db->prepare('UPDATE users SET password_hash=?, role=\"admin\", status=\"active\" WHERE email=?')->execute([\$hash, \$email]);
+        } else {
+          \$db->prepare('INSERT INTO users (name,email,password_hash,role,status) VALUES (?,?,?,?,?)')
+             ->execute(['Administrator', \$email, \$hash, 'admin', 'active']);
+        }
+        fwrite(STDERR, '[entrypoint]   admin user ready: '.\$email.PHP_EOL);
+        // Seed default settings (scraper + comments) so things work out-of-box
+        \$defaults = [
+          'scraper_use_api'     => '1',
+          'scraper_api_url'     => getenv('SCRAPER_API_URL'),
+          'scraper_api_key'     => getenv('SCRAPER_API_KEY_ENV'),
+          'scraper_api_timeout' => '30',
+          'comments_enabled'    => '1',
+          'comments_on_comic'   => '1',
+          'comments_on_chapter' => '1',
+          'comments_api_url'    => '',
+        ];
+        \$ins = \$db->prepare('INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)');
+        foreach (\$defaults as \$k => \$v) { \$ins->execute([\$k, \$v]); }
+        fwrite(STDERR, '[entrypoint]   default settings seeded'.PHP_EOL);
+      " && touch "$LOCK" && chown www-data:www-data "$LOCK"
+      echo "[entrypoint] Install complete."
+    else
+      echo "[entrypoint] Tables already exist — skipping import."
+      touch "$LOCK" && chown www-data:www-data "$LOCK"
+    fi
+  else
+    echo "[entrypoint] Already installed (lock file present)."
+  fi
 fi
 
 exec "$@"
