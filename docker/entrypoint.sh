@@ -50,9 +50,11 @@ if [[ "${AUTO_INSTALL:-0}" == "1" ]]; then
           \$sql = file_get_contents('/var/www/html/database/'.\$name.'.sql');
           if (\$sql === false || trim(\$sql) === '') continue;
           \$sql = preg_replace('!/\*.*?\*/!s', '', \$sql);
+          // strip whole-line -- comments before splitting on ;
+          \$sql = preg_replace('/^[ \t]*--[^\n]*\n/m', '', \$sql);
           foreach (preg_split('/;\s*\n/', \$sql) as \$stmt) {
             \$stmt = trim(\$stmt);
-            if (\$stmt === '' || str_starts_with(\$stmt, '--')) continue;
+            if (\$stmt === '') continue;
             \$db->exec(\$stmt);
           }
           fwrite(STDERR, '[entrypoint]   loaded '.\$name.'.sql'.PHP_EOL);

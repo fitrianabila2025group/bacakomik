@@ -325,7 +325,7 @@ function run_sql_script(PDO $pdo, string $sql): void
     }
 
     // Parser sederhana — buang komentar baris (-- ...) lalu split berdasar ;\n
-    $clean = preg_replace('/^\s*--.*$/m', '', $sql);
+    $clean = preg_replace('/^[ \t]*--[^\n]*\n/m', '', $sql);
     $stmts = preg_split('/;\s*\n/', (string)$clean);
     foreach ($stmts as $s) {
         $s = trim((string)$s);
