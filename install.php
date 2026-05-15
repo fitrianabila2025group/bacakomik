@@ -129,6 +129,17 @@ function show_form(array $errors = [], array $old = []): void
         <small>Minimal 8 karakter. Ganti segera setelah login.</small>
       </label>
 
+      <h2>4. Scraper API <small style="font-weight:400">(opsional — bisa diisi nanti di /admin/settings)</small></h2>
+
+      <label>Scraper API URL
+        <input name="scraper_api_url" value="<?= $val('scraper_api_url', '') ?>" placeholder="https://your-scraper.up.railway.app">
+        <small>Kosongkan jika belum punya. Tanpa scraper API, fitur import komik <b>tidak akan jalan</b> di shared hosting.</small>
+      </label>
+
+      <label>Scraper API Key
+        <input name="scraper_api_key" value="<?= $val('scraper_api_key', '') ?>" placeholder="X-API-Key value">
+      </label>
+
       <button class="btn primary" type="submit">▶ Install Sekarang</button>
     </form>
     <?php
@@ -148,6 +159,8 @@ function handle_install(): void
         'app_name'    => trim((string)($_POST['app_name'] ?? 'BacaKomik')),
         'admin_email' => trim((string)($_POST['admin_email'] ?? '')),
         'admin_pass'  => (string)($_POST['admin_pass'] ?? ''),
+        'scraper_api_url' => rtrim(trim((string)($_POST['scraper_api_url'] ?? '')), '/'),
+        'scraper_api_key' => trim((string)($_POST['scraper_api_key'] ?? '')),
     ];
 
     foreach (['db_host','db_name','db_user','app_url','app_name','admin_email','admin_pass'] as $req) {
@@ -210,6 +223,28 @@ function handle_install(): void
         }
     } catch (Throwable $e) {
         show_form(['Gagal set akun admin: ' . $e->getMessage()], $in); return;
+    }
+
+    // 4b) Seed default settings (scraper + comments) supaya fitur import &
+    //     komentar langsung aktif tanpa perlu klik manual di /admin/settings.
+    try {
+        $useApi = ($in['scraper_api_url'] !== '') ? '1' : '0';
+        $defaults = [
+            'scraper_use_api'     => $useApi,
+            'scraper_api_url'     => $in['scraper_api_url'],
+            'scraper_api_key'     => $in['scraper_api_key'],
+            'scraper_api_timeout' => '30',
+            'scraper_remote_storage' => '1',
+            'scraper_proxy_public'   => '1',
+            'comments_enabled'    => '1',
+            'comments_on_comic'   => '1',
+            'comments_on_chapter' => '1',
+            'comments_api_url'    => '',
+        ];
+        $ins = $pdo->prepare('INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)');
+        foreach ($defaults as $k => $v) { $ins->execute([$k, $v]); }
+    } catch (Throwable $e) {
+        // Non-fatal: admin bisa konfigurasi manual nanti.
     }
 
     // 5) Tulis config files
