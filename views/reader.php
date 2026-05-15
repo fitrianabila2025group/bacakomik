@@ -60,7 +60,12 @@ $comicTitle    = htmlspecialchars($comic['title']);
     </div>
   <?php else: ?>
     <?php foreach ($images as $i => $img): ?>
-      <?php $src = $img['image_path'] ?? ($img['image_url'] ?? ''); ?>
+      <?php
+        $src = $img['image_path'] ?? ($img['image_url'] ?? '');
+        // CRITICAL: route via imgproxy() -> /img.php on shared host.
+        // Railway IP diblok komiku/Cloudflare -> 403.
+        $src = imgproxy($src);
+      ?>
       <?php if ($src): ?>
         <img
           class="reader-page"
