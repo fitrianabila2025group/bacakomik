@@ -97,4 +97,26 @@ if [[ "${AUTO_INSTALL:-0}" == "1" ]]; then
   fi
 fi
 
+# Idempotent upgrade step: jalan SETIAP boot. Hanya tambah baris yang
+# memang belum ada (INSERT IGNORE / ON DUPLICATE KEY). Aman utk DB lama.
+if [[ -n "${DB_HOST:-}" ]]; then
+  php -r "
+    try {
+      \$db = new PDO('mysql:host='.getenv('DB_HOST').';port='.(getenv('DB_PORT')?:3306).';dbname='.getenv('DB_NAME').';charset=utf8mb4',
+                    getenv('DB_USER'), getenv('DB_PASS'),
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+      // Tambah ad slot global utk Adsterra/Monetag tanpa mengganggu yg sudah ada.
+      \$rows = [
+        ['global_head','Global <head> (Adsterra/Monetag popunder, social-bar, push)'],
+        ['global_body_end','Global </body> (direct-link, native banner, in-page)'],
+      ];
+      \$ins = \$db->prepare('INSERT IGNORE INTO ad_slots (slot_key, slot_name, ad_code, is_active) VALUES (?, ?, \"\", 1)');
+      foreach (\$rows as \$r) { \$ins->execute(\$r); }
+      fwrite(STDERR, '[entrypoint] upgrade: global ad slots ensured'.PHP_EOL);
+    } catch (Throwable \$e) {
+      fwrite(STDERR, '[entrypoint] upgrade skipped: '.\$e->getMessage().PHP_EOL);
+    }
+  " || true
+fi
+
 exec "$@"

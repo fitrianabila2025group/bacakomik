@@ -71,7 +71,8 @@ $comicTitle    = htmlspecialchars($comic['title']);
           class="reader-page"
           src="<?= htmlspecialchars($src) ?>"
           alt="<?= $comicTitle ?> Chapter <?= $chapterNumber ?> Page <?= $i + 1 ?>"
-          loading="<?= $i < 2 ? 'eager' : 'lazy' ?>"
+          loading="<?= $i < 3 ? 'eager' : 'lazy' ?>"
+          fetchpriority="<?= $i < 3 ? 'high' : 'low' ?>"
           decoding="async"
         >
         <?php if ($i === 2): ad('reader_middle'); endif; ?>
@@ -105,3 +106,26 @@ $comicTitle    = htmlspecialchars($comic['title']);
     <?= \App\Comments::render('chapter', 'chapter:' . $chapter['id']) ?>
   </div>
 </section>
+
+<script>
+// Reader: prefetch SEMUA gambar chapter begitu window.load, supaya saat user
+// scroll cepat di mobile gambar sudah ada di cache browser. Dipasangkan dengan
+// loading="eager" + fetchpriority="high" pada 3 gambar pertama (di template).
+(function () {
+  const imgs = document.querySelectorAll('img.reader-page');
+  if (!imgs.length) return;
+  function prefetchAll() {
+    imgs.forEach((el, i) => {
+      if (i < 3) return;
+      const url = el.getAttribute('src');
+      if (!url) return;
+      const im = new Image();
+      try { im.fetchPriority = 'low'; } catch (_) {}
+      im.decoding = 'async';
+      im.src = url;
+    });
+  }
+  if (document.readyState === 'complete') prefetchAll();
+  else window.addEventListener('load', prefetchAll, { once: true });
+})();
+</script>

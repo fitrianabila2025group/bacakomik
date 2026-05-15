@@ -30,6 +30,7 @@ $user = \App\Auth::user();
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/css/style.css?v=<?= @filemtime(__DIR__ . '/../../public/assets/css/style.css') ?: time() ?>">
 <?= \App\Captcha::headScript() ?>
+<?php /* Global ads (Adsterra/Monetag head script: popunder, social-bar, push) */ ad('global_head'); ?>
 <script>
 const stored = localStorage.getItem('theme'); if (stored) document.documentElement.dataset.theme = stored;
 </script>
@@ -90,5 +91,6 @@ const stored = localStorage.getItem('theme'); if (stored) document.documentEleme
 </footer>
 
 <script src="/assets/js/app.js"></script>
+<?php /* Global ads (Adsterra/Monetag direct-link, native banner end-of-body) */ ad('global_body_end'); ?>
 </body>
 </html>

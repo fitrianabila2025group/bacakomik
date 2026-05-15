@@ -444,3 +444,78 @@ img { max-width: 100%; display: block; }
   gap: .5rem;
   margin-top: 1rem;
 }
+
+/* --- Comments desktop polish + skeleton + spinner (final) --- */
+.reader-comments .container { max-width: 900px; }
+#bk-comments {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 1rem 0;
+}
+@media (min-width: 1024px) {
+  /* Pada desktop, jaga form komentar tidak full-bleed */
+  #bk-comments {
+    padding: 1.25rem 1.5rem;
+    background: var(--bg-soft, rgba(0,0,0,.02));
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .comments-form-wrap { margin: .5rem 0 1rem; }
+  .comment-form textarea {
+    min-height: 84px;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .comment-actions { gap: .4rem; }
+  .comments-list .replies { margin-left: 3rem; }
+}
+.comments-form-wrap { display: block; width: 100%; }
+.comments-empty {
+  list-style: none;
+  text-align: center;
+  color: var(--muted);
+  padding: 1.5rem .5rem;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+.comments-bar { gap: .5rem; }
+.comments-spinner {
+  width: 14px; height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent, #6366f1);
+  border-radius: 50%;
+  display: inline-block;
+  animation: bk-spin .7s linear infinite;
+}
+@keyframes bk-spin { to { transform: rotate(360deg); } }
+.comment.skel {
+  border-top: 1px solid var(--border);
+  padding: .9rem 0;
+}
+.comment.skel .sk-line {
+  height: 10px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--border) 0%, rgba(0,0,0,.06) 50%, var(--border) 100%);
+  background-size: 200% 100%;
+  margin: .35rem 0;
+  animation: bk-shimmer 1.2s linear infinite;
+}
+.comment.skel .w40 { width: 40%; }
+.comment.skel .w70 { width: 70%; }
+.comment.skel .w90 { width: 90%; }
+@keyframes bk-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+[data-theme="dark"] .comment.skel .sk-line {
+  background: linear-gradient(90deg, rgba(255,255,255,.05) 0%, rgba(255,255,255,.12) 50%, rgba(255,255,255,.05) 100%);
+  background-size: 200% 100%;
+}
+[data-theme="dark"] #bk-comments {
+  background: rgba(255,255,255,.02);
+}
+
+/* Ad slot containers — biar tidak collapse / dorong layout aneh */
+.ad-slot { margin: 1rem 0; text-align: center; min-height: 0; }
+.ad-slot:empty { display: none; }
+.ad-global_head, .ad-global_body_end { display: none; }  /* invisible script hosts */

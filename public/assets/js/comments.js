@@ -46,7 +46,19 @@
     });
   };
 
-  let state = { sort: 'top', page: 1, total: 0, comments: [] };
+  let state = { sort: 'top', page: 1, total: 0, comments: [], loading: false };
+  // In-memory cache utk hasil tab/page yg pernah dibuka -> tidak perlu round-trip
+  // Railway lagi saat user pindah tab Top/Terbaru/Terlama bolak-balik.
+  const cache = new Map();
+  const cacheKey = () => state.sort + ':' + state.page;
+
+  function skeleton() {
+    let html = '';
+    for (let i = 0; i < 4; i++) {
+      html += '<li class="comment skel"><div class="sk-line w40"></div><div class="sk-line w90"></div><div class="sk-line w70"></div></li>';
+    }
+    return html;
+  }
 
   function render() {
     root.innerHTML = `
@@ -55,9 +67,10 @@
         <div class="comments-sort">
           ${['top','new','old'].map(s => `<button data-sort="${s}" class="${state.sort===s?'active':''}">${s==='top'?'Top':s==='new'?'Terbaru':'Terlama'}</button>`).join('')}
         </div>
+        ${state.loading ? '<span class="comments-spinner" aria-label="Memuat"></span>' : ''}
       </div>
       <div class="comments-form-wrap"></div>
-      <ul class="comments-list">${state.comments.map(renderItem).join('')}</ul>
+      <ul class="comments-list">${state.loading && !state.comments.length ? skeleton() : state.comments.map(renderItem).join('') || '<li class="comments-empty">Belum ada komentar.</li>'}</ul>
       <div class="comments-pager"></div>
     `;
     renderForm(root.querySelector('.comments-form-wrap'), null, 'Tulis komentar...');
@@ -113,12 +126,18 @@
       if (!text) return;
       const btn = f.querySelector('button[type=submit]');
       btn.disabled = true;
+      btn.textContent = 'Mengirim...';
       try {
         await api('POST', '', { target: cfg.target, parent_id: parentId, text });
+        // Invalidate cache supaya komentar baru terlihat.
+        cache.clear();
+        f.text.value = '';
         await load(state.page);
       } catch (err) {
         alert('Gagal: ' + err.message);
+      } finally {
         btn.disabled = false;
+        btn.textContent = 'Kirim';
       }
     });
     const cancel = f.querySelector('.cancel-reply');
@@ -127,14 +146,20 @@
 
   function bindActions() {
     root.querySelectorAll('.comments-sort button').forEach(b => b.addEventListener('click', () => {
-      state.sort = b.dataset.sort; load(1);
+      if (state.sort === b.dataset.sort) return;
+      state.sort = b.dataset.sort;
+      // Repaint INSTAN (UI sort tab langsung pindah) lalu fetch async.
+      load(1);
     }));
     root.querySelectorAll('.react-btn').forEach(b => b.addEventListener('click', async () => {
       if (!cfg.me) { location.href = cfg.login_url; return; }
+      // Optimistic: tandai aktif sebelum round-trip.
+      b.classList.toggle('on');
       try {
         await api('POST', '/' + b.dataset.id + '/react', { type: b.dataset.type });
-        await load(state.page);
-      } catch (err) { alert(err.message); }
+        cache.clear();
+        await load(state.page, /*silent*/ true);
+      } catch (err) { b.classList.toggle('on'); alert(err.message); }
     }));
     root.querySelectorAll('.reply-btn').forEach(b => b.addEventListener('click', () => {
       const li = b.closest('.comment');
@@ -147,16 +172,35 @@
       if (!confirm('Hapus komentar ini?')) return;
       try {
         await api('POST', '/' + b.dataset.id + '/delete', {});
+        cache.clear();
         await load(state.page);
       } catch (err) { alert(err.message); }
     }));
   }
 
-  function load(page = 1) {
+  function load(page = 1, silent = false) {
     state.page = page;
+    const key = cacheKey();
+    // 1) Kalau ada cache, tampilkan duluan -> UI INSTAN.
+    if (cache.has(key)) {
+      const j = cache.get(key);
+      state.total = j.total; state.comments = j.comments || [];
+      state.loading = false;
+      render();
+      // tetap revalidate diam-diam, tapi jangan repaint kalau hasil sama.
+      silent = true;
+    } else if (!silent) {
+      state.loading = true;
+      render();
+    }
     return api('GET', '?target=' + encodeURIComponent(cfg.target) + '&sort=' + state.sort + '&page=' + page)
-      .then(j => { state.total = j.total; state.comments = j.comments || []; render(); renderPager(); })
-      .catch(err => { root.innerHTML = '<p class="comments-error">Gagal memuat komentar: ' + esc(err.message) + '</p>'; });
+      .then(j => {
+        cache.set(key, j);
+        state.total = j.total; state.comments = j.comments || [];
+        state.loading = false;
+        render(); renderPager();
+      })
+      .catch(err => { state.loading = false; root.innerHTML = '<p class="comments-error">Gagal memuat komentar: ' + esc(err.message) + '</p>'; });
   }
 
   function renderPager() {
